@@ -1,4 +1,7 @@
+version development
+
 ## Copyright Broad Institute, 2017
+## Philipp Hähnel, 2022
 ##
 ## This WDL workflow calls pairs of replicates as tumor-normal pairs, 
 ## counts the number of variants (i.e. false positives) and reports false 
@@ -11,7 +14,7 @@
 ## - False Positive VCF files and its index with summary
 ##
 ## Cromwell version support
-## - Successfully tested on v36
+## - Successfully tested on v71
 ##
 ## LICENSING :
 ## This script is released under the WDL source code license (BSD-3) (see LICENSE in
@@ -21,105 +24,192 @@
 ## pages at https://hub.docker.com/r/broadinstitute/* for detailed licensing information
 ## pertaining to the included programs.
 
-import "https://raw.githubusercontent.com/gatk-workflows/gatk4-somatic-snvs-indels/2.5.0/mutect2_nio.wdl" as m2
+# import "mutect2.wdl" as m2
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/mutect2.wdl" as m2
 
 workflow Mutect2NormalNormal {
-	File? intervals
-	File ref_fasta
-	File ref_fai
-	File ref_dict
-	Int scatter_count
-	Array[File] bams
-	Array[File] bais
-	File? pon
-	File? gnomad
-	File? variants_for_contamination
-	Boolean? run_orientation_bias_mixture_model_filter
-	File? realignment_index_bundle
-	String? realignment_extra_args
-	String? m2_extra_args
-	String? m2_extra_filtering_args
-	Boolean? make_bamout
+	input {
+		File? interval_list
+        File ref_fasta
+        File ref_fasta_index
+        File ref_dict
 
-	File? gatk_override
-	String gatk_docker
-	Int? preemptible_attempts
+        Array[File]+ bams
+        Array[File]+ bais
 
-	Array[Pair[File,File]] bam_pairs = cross(bams, bams)
-	Array[Pair[File,File]] bai_pairs = cross(bais, bais)
+        # workflow options
+        Boolean run_contaminanation_model = true
+        Boolean run_orientation_bias_mixture_model_filter = true
+        Boolean run_variant_filter = true
+        Boolean run_realignment_filter = true
+        Boolean keep_germline = false  # not currently supported
+        Boolean compress_output = true
+        Boolean make_bamout = false
+
+        # expose extra arguments for import of this workflow
+        String? split_intervals_extra_args
+        String? m2_extra_args
+        String? m2_filter_extra_args
+        String? select_variants_extra_args
+        String? realignment_extra_args
+
+        # resources
+        File? panel_of_normals
+        File? panel_of_normals_idx
+        File? germline_resource
+        File? germline_resource_tbi
+		File? variants_for_contamination
+		File? variants_for_contamination_idx
+        File? bwa_mem_index_image
+
+        # runtime
+        Int scatter_count = 42
+        String gatk_docker = "broadinstitute/gatk"
+        File? gatk_override
+        Int preemptible = 2
+        Int max_retries = 2
+        Int emergency_extra_diskGB = 0
+
+        # memory assignments in MB
+        Int additional_per_sample_mem = 256  # this actually can depend on sample size (WES vs WGS)
+        Int split_intervals_mem = 512  # 64
+        Int get_sample_name_mem = 512  # 256
+        Int variant_call_base_mem = 4096
+        Int learn_read_orientation_model_base_mem = 6144
+        Int get_pileup_summaries_mem = 2048  # needs at least 2G
+        Int gather_pileup_summaries_mem = 512  # 64
+        Int calculate_contamination_mem = 512
+        Int filter_mutect_calls_mem = 512
+        Int select_variants_mem = 512
+        Int filter_alignment_artifacts_mem = 4096
+        Int merge_vcfs_mem = 512
+        Int merge_mutect_stats_mem = 512 # 64
+        Int merge_bams_mem = 8192  # wants at least 6G
+
+        # Increasing cpus likely increases costs by the same factor.
+        Int variant_call_cpu = 1  # good for PairHMM: 2
+        Int filter_alignment_artifacts_cpu = 1  # good for PairHMM: 4
+	}
+
+	Array[Pair[File, File]] bam_pairs = cross(bams, bams)
+	Array[Pair[File, File]] bai_pairs = cross(bais, bais)
 
 	scatter(n in range(length(bam_pairs))) {
 	    File tumor_bam = bam_pairs[n].left
 	    File normal_bam = bam_pairs[n].right
 	    File tumor_bai = bai_pairs[n].left
-            File normal_bai = bai_pairs[n].right
+		File normal_bai = bai_pairs[n].right
 
         if (tumor_bam != normal_bam) {
             call m2.Mutect2 {
                 input:
-                    intervals = intervals,
-                    ref_fasta = ref_fasta,
-                    ref_fai = ref_fai,
-                    ref_dict = ref_dict,
-                    tumor_reads = tumor_bam,
-                    tumor_reads_index = tumor_bai,
-                    normal_reads = normal_bam,
-                    normal_reads_index = normal_bai,
-                    pon = pon,
-                    scatter_count = scatter_count,
-                    gnomad = gnomad,
-                    variants_for_contamination = variants_for_contamination,
-                    run_orientation_bias_mixture_model_filter = run_orientation_bias_mixture_model_filter,
-                    preemptible_attempts = preemptible_attempts,
-                    realignment_index_bundle = realignment_index_bundle,
-                    realignment_extra_args = realignment_extra_args,
-                    m2_extra_args = m2_extra_args,
-                    m2_extra_filtering_args = m2_extra_filtering_args,
-                    gatk_override = gatk_override,
-                    gatk_docker = gatk_docker
+                    interval_list = interval_list,
+					ref_fasta = ref_fasta,
+					ref_fasta_index = ref_fasta_index,
+					ref_dict = ref_dict,
+
+					tumor_bam = tumor_bam,
+					tumor_bai = tumor_bai,
+					normal_bam = normal_bam,
+					normal_bai = normal_bai,
+
+					run_contaminanation_model = run_contaminanation_model,
+					run_orientation_bias_mixture_model_filter = run_orientation_bias_mixture_model_filter,
+					run_variant_filter = run_variant_filter,
+					run_realignment_filter = run_realignment_filter,
+					run_funcotator = false,
+					keep_germline = keep_germline,
+					compress_output = compress_output,
+					make_bamout = make_bamout,
+
+					split_intervals_extra_args = split_intervals_extra_args,
+					m2_extra_args = m2_extra_args,
+					m2_filter_extra_args = m2_filter_extra_args,
+					select_variants_extra_args = select_variants_extra_args,
+					realignment_extra_args = realignment_extra_args,
+
+					panel_of_normals = panel_of_normals,
+					panel_of_normals_idx = panel_of_normals_idx,
+					germline_resource = germline_resource,
+					germline_resource_tbi = germline_resource_tbi,
+					variants_for_contamination = variants_for_contamination,
+					variants_for_contamination_idx = variants_for_contamination_idx,
+					bwa_mem_index_image = bwa_mem_index_image,
+
+					scatter_count = scatter_count,
+					gatk_docker = gatk_docker,
+					gatk_override = gatk_override,
+					preemptible = preemptible,
+					max_retries = max_retries,
+					emergency_extra_diskGB = emergency_extra_diskGB,
+
+					additional_per_sample_mem = additional_per_sample_mem,
+					split_intervals_mem = split_intervals_mem,
+					get_sample_name_mem = get_sample_name_mem,
+					variant_call_base_mem = variant_call_base_mem,
+					learn_read_orientation_model_base_mem = learn_read_orientation_model_base_mem,
+					get_pileup_summaries_mem = get_pileup_summaries_mem,
+					gather_pileup_summaries_mem = gather_pileup_summaries_mem,
+					calculate_contamination_mem = calculate_contamination_mem,
+					filter_mutect_calls_mem = filter_mutect_calls_mem,
+					select_variants_mem = select_variants_mem,
+					filter_alignment_artifacts_mem = filter_alignment_artifacts_mem,
+					merge_vcfs_mem = merge_vcfs_mem,
+					merge_mutect_stats_mem = merge_mutect_stats_mem,
+					merge_bams_mem = merge_bams_mem,
+
+					variant_call_cpu = variant_call_cpu,
+					filter_alignment_artifacts_cpu = filter_alignment_artifacts_cpu
             }
 
             call CountFalsePositives {
                 input:
-                    intervals = intervals,
+                    interval_list = interval_list,
                     ref_fasta = ref_fasta,
-                    ref_fai = ref_fai,
+                    ref_fasta_index = ref_fasta_index,
                     ref_dict = ref_dict,
-                    filtered_vcf = Mutect2.filtered_vcf,
-                    filtered_vcf_index = Mutect2.filtered_vcf_idx,
+                    vcf = Mutect2.merged_vcf,
+                    vcf_idx = Mutect2.merged_vcf_idx,
                     gatk_override = gatk_override,
                     gatk_docker = gatk_docker
             }
 		}
 	}
 
-	call GatherTables { input: tables = select_all(CountFalsePositives.false_positive_counts) }
+	call GatherTables {
+		input:
+			tables = select_all(CountFalsePositives.false_positive_counts)
+	}
 
 	output {
 		File summary = GatherTables.summary
-		Array[File] false_positives_vcfs = select_all(Mutect2.filtered_vcf)
-		Array[File] false_positives_vcf_indices = select_all(Mutect2.filtered_vcf_idx)
+		Array[File] false_positives_vcfs = select_all(Mutect2.merged_vcf)
+		Array[File] false_positives_vcf_indices = select_all(Mutect2.merged_vcf_idx)
 	}
 }
 
 task GatherTables {
-    # we assume that each table consists of two lines: one header line and one record
-	Array[File] tables
+	input {
+		# we assume that each table consists of two lines: one header line and one record
+		Array[File] tables
+	}
 
-	command {
+	String dollar = "$"
+
+	command <<<
 	    # extract the header from one of the files
-		head -n 1 ${tables[0]} > summary.txt
+		head -n 1 ~{tables[0]} > summary.txt
 
 		# then append the record from each table
-		for table in ${sep=" " tables}; do
-			tail -n +2 $table >> summary.txt
+		for table in ~{sep=" " tables}; do
+			tail -n +2 ~{dollar}table >> summary.txt
 		done
-	}
+	>>>
 
 	runtime {
         docker: "broadinstitute/genomes-in-the-cloud:2.2.4-1469632282"
         memory: "1 GB"
-        disks: "local-disk " + 100 + " HDD"
+        disks: "local-disk " + 1 + " HDD"
     }
 
 	output {
@@ -128,36 +218,36 @@ task GatherTables {
 }
 
 task CountFalsePositives {
-	File? intervals
-	File ref_fasta
-	File ref_fai
-	File ref_dict
-	File filtered_vcf
-	File filtered_vcf_index
+	input {
+		File? interval_list
+		File ref_fasta
+		File ref_fasta_index
+		File ref_dict
+		File vcf
+		File vcf_idx
 
-	File? gatk_override
+		File? gatk_override
+		String gatk_docker
+	}
 
-	String gatk_docker
-
-	command {
-        export GATK_LOCAL_JAR=${default="/root/gatk.jar" gatk_override}
+	command <<<
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
 
 	    gatk --java-options "-Xmx4g" CountFalsePositives \
-		    -V ${filtered_vcf} \
+		    -V ${vcf} \
 		    -R ${ref_fasta} \
-		    ${"-L " + intervals} \
+		    ~{"-L " + interval_list} \
 		    -O false-positives.txt \
-	}
+	>>>
 
     runtime {
         docker: gatk_docker
         bootDiskSizeGb: 12
         memory: "5 GB"
-        disks: "local-disk " + 500 + " HDD"
+        disks: "local-disk " + 5 + " HDD"
     }
 
 	output {
 		File false_positive_counts = "false-positives.txt"
 	}
 }
-

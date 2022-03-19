@@ -34,6 +34,5 @@
   "Mutect2NormalNormal.scatter_count": "10",
 
   "##_COMMENT4": "Docker",
-  "Mutect2NormalNormal.gatk_docker": "broadinstitute/gatk:4.1.2.0"
+  "Mutect2NormalNormal.gatk_docker": "broadinstitute/gatk"
 }
-
