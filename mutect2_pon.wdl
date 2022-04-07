@@ -63,7 +63,7 @@ workflow Mutect2_Panel {
     scatter (normal_bam in zip(normal_bams, normal_bais)) {
         call msm2.GetSampleName {
             input:
-                bam = normal_bam,
+                bam = normal_bam.left,
                 runtime_params = standard_runtime,
         }
 
@@ -76,9 +76,9 @@ workflow Mutect2_Panel {
                 individual_id = GetSampleName.sample_name,
                 tumor_bams = [normal_bam.left],
                 tumor_bais = [normal_bam.right],
-                run_contaminanation_model = false,
+                run_contamination_model = false,
                 run_orientation_bias_mixture_model_filter = false,
-                run_variant_filter = true,
+                run_variant_filter = false,
                 run_realignment_filter = false,
                 run_funcotator = false,
                 compress_output = compress_output,

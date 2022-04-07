@@ -120,16 +120,15 @@ workflow MultiSampleMutect2 {
         Array[File]? normal_bais
 
         # workflow options
-        Boolean run_contaminanation_model = true
-        Boolean run_orientation_bias_mixture_model_filter = true
+        Boolean run_contamination_model = true
+        Boolean run_orientation_bias_mixture_model = true
         Boolean run_variant_filter = true
         Boolean run_realignment_filter = true
         Boolean run_funcotator = true
         Boolean keep_germline = false  # not currently supported
-        Boolean compress_output = false
+        Boolean compress_output = true
         Boolean make_bamout = false
-        Boolean funcotator_use_gnomad = false
-        Boolean filter_funcotations = false
+        Boolean funcotator_use_gnomad = true
 
         # expose extra arguments for import of this workflow
         String? split_intervals_extra_args
@@ -167,8 +166,8 @@ workflow MultiSampleMutect2 {
         Int get_pileup_summaries_mem = 2048  # needs at least 2G
         Int gather_pileup_summaries_mem = 512  # 64
         Int calculate_contamination_mem = 512
-        Int filter_mutect_calls_mem = 512
-        Int select_variants_mem = 512
+        Int filter_mutect_calls_mem = 4096
+        Int select_variants_mem = 2048
         Int filter_alignment_artifacts_mem = 4096
         Int merge_vcfs_mem = 512
         Int merge_mutect_stats_mem = 512 # 64
@@ -252,7 +251,7 @@ workflow MultiSampleMutect2 {
                 germline_resource = germline_resource,
                 germline_resource_tbi = germline_resource_tbi,
                 make_bamout = make_bamout,
-                run_ob_filter = run_orientation_bias_mixture_model_filter,
+                run_ob_filter = run_orientation_bias_mixture_model,
                 genotype_germline_sites = keep_germline,
                 compress_output = compress_output,
                 m2_extra_args = m2_extra_args,
@@ -264,7 +263,25 @@ workflow MultiSampleMutect2 {
 		}
 	}
 
-    if (run_contaminanation_model) {
+    call MergeVCFs as MergeVariantCallVCFs {
+    	input:
+            input_vcfs = VariantCall.vcf,
+            input_vcf_indices = VariantCall.vcf_idx,
+            output_name = individual_id + ".unfiltered.merged",
+            compress_output = compress_output,
+            runtime_params = standard_runtime,
+            memoryMB = merge_vcfs_mem
+    }
+
+    call MergeMutectStats {
+        input:
+            stats = VariantCall.vcf_stats,
+            individual_id = individual_id,
+            runtime_params = standard_runtime,
+            memoryMB = merge_mutect_stats_mem
+    }
+
+    if (run_contamination_model) {
         scatter (tumor_sample in zip(tumor_bams, tumor_bais)) {
             scatter (scattered_intervals in SplitIntervals.interval_files) {
                 call GetPileupSummaries as GetTumorPileupSummaries {
@@ -336,7 +353,7 @@ workflow MultiSampleMutect2 {
         }
     }
 
-    if (run_orientation_bias_mixture_model_filter) {
+    if (run_orientation_bias_mixture_model) {
         call LearnReadOrientationModel {
             input:
                 individual_id = individual_id,
@@ -347,51 +364,87 @@ workflow MultiSampleMutect2 {
     }
 
     if (run_variant_filter) {
-        Array[Array[File]]+ variant_call_output_transposed = transpose(
-            [
-                VariantCall.vcf,
-                VariantCall.vcf_idx,
-                VariantCall.vcf_stats,
-            ]
-        )
-        scatter(variant_call_output in variant_call_output_transposed) {
-            File cur_vcf = variant_call_output[0]
-            File cur_vcf_idx = variant_call_output[1]
-            File cur_stats = variant_call_output[2]
+        # Filter obvious miscalls to not waste resources on the subsequent tasks
+#        call VariantFiltration {
+#            input:
+#                input_vcf = MergeVariantCallVCFs.merged_vcf,
+#                input_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx,
+#                compress_output = compress_output,
+#                runtime_params = standard_runtime,
+#                memoryMB = filter_mutect_calls_mem,
+#        }
+#
+#        call SelectVariants as SelectGoodVariants {
+#            input:
+#                ref_fasta = ref_fasta,
+#                ref_fasta_index = ref_fasta_index,
+#                ref_dict = ref_dict,
+#                filtered_vcf = VariantFiltration.filtered_vcf,
+#                filtered_vcf_idx = VariantFiltration.filtered_vcf_idx,
+#                exclude_filtered = true,
+#                keep_germline = keep_germline,
+#                compress_output = compress_output,
+#                select_variants_extra_args = select_variants_extra_args,
+#                runtime_params = standard_runtime,
+#                memoryMB = select_variants_mem
+#        }
 
-            call FilterMutectCalls {
-                input:
-                    ref_fasta = ref_fasta,
-                    ref_fasta_index = ref_fasta_index,
-                    ref_dict = ref_dict,
-                    input_vcf = cur_vcf,
-                    input_vcf_idx = cur_vcf_idx,
-                    orientation_bias = LearnReadOrientationModel.orientation_bias,
-                    contamination_tables = CalculateContamination.contamination_table,
-                    tumor_segmentation = CalculateContamination.tumor_segmentation,
-                    mutect_stats = cur_stats,
-                    compress_output = compress_output,
-                    m2_filter_extra_args = m2_filter_extra_args,
-                    runtime_params = standard_runtime,
-                    memoryMB = filter_mutect_calls_mem,
-            }
+        # From the documentation: "FilterMutectCalls goes over an unfiltered vcf in
+        # three passes, two to learn any unknown parameters of the filters' models and
+        # to set the threshold P(error), and one to apply the learned filters. [...]
+        # [As such] it is critical to merge the unfiltered output of Mutect2 before
+        # filtering."
+        call FilterMutectCalls {
+            input:
+                ref_fasta = ref_fasta,
+                ref_fasta_index = ref_fasta_index,
+                ref_dict = ref_dict,
+                input_vcf = MergeVariantCallVCFs.merged_vcf,
+                input_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx,
+                orientation_bias = LearnReadOrientationModel.orientation_bias,
+                contamination_tables = CalculateContamination.contamination_table,
+                tumor_segmentation = CalculateContamination.tumor_segmentation,
+                mutect_stats = MergeMutectStats.merged_stats,
+                compress_output = compress_output,
+                m2_filter_extra_args = m2_filter_extra_args,
+                runtime_params = standard_runtime,
+                memoryMB = filter_mutect_calls_mem,
+        }
 
-            call SelectVariants as SelectPassingVariants {
-                input:
-                    ref_fasta = ref_fasta,
-                    ref_fasta_index = ref_fasta_index,
-                    ref_dict = ref_dict,
-                    filtered_vcf = FilterMutectCalls.filtered_vcf,
-                    filtered_vcf_idx = FilterMutectCalls.filtered_vcf_idx,
-                    exclude_filtered = true,
-                    keep_germline = keep_germline,
-                    compress_output = compress_output,
-                    select_variants_extra_args = select_variants_extra_args,
-                    runtime_params = standard_runtime,
-                    memoryMB = select_variants_mem
-            }
+        call SelectVariants as SelectPassingVariants {
+            input:
+                ref_fasta = ref_fasta,
+                ref_fasta_index = ref_fasta_index,
+                ref_dict = ref_dict,
+                filtered_vcf = FilterMutectCalls.filtered_vcf,
+                filtered_vcf_idx = FilterMutectCalls.filtered_vcf_idx,
+                exclude_filtered = true,
+                keep_germline = keep_germline,
+                compress_output = compress_output,
+                select_variants_extra_args = select_variants_extra_args,
+                runtime_params = standard_runtime,
+                memoryMB = select_variants_mem
+        }
 
-            if (run_realignment_filter) {
+        if (run_realignment_filter) {
+            # Realigning reads for variants can be expensive / slow if many variants
+            # have been called. Thus, we scatter the realignment task over intervals.
+            scatter (scattered_intervals in SplitIntervals.interval_files) {
+                call SelectVariants as SelectPreRealignmentVariants {
+                    input:
+                        ref_fasta = ref_fasta,
+                        ref_fasta_index = ref_fasta_index,
+                        ref_dict = ref_dict,
+                        interval_list = scattered_intervals,
+                        filtered_vcf = SelectPassingVariants.selected_vcf,
+                        filtered_vcf_idx = SelectPassingVariants.selected_vcf_idx,
+                        exclude_filtered = false,  # is already filtered
+                        keep_germline = keep_germline,
+                        compress_output = compress_output,
+                        runtime_params = standard_runtime,
+                        memoryMB = select_variants_mem
+                }
+
                 call FilterAlignmentArtifacts {
                     input:
                         ref_fasta = ref_fasta,
@@ -399,8 +452,8 @@ workflow MultiSampleMutect2 {
                         ref_dict = ref_dict,
                         tumor_bams = tumor_bams,
                         tumor_bais = tumor_bais,
-                        input_vcf = SelectPassingVariants.selected_vcf,
-                        input_vcf_idx = SelectPassingVariants.selected_vcf_idx,
+                        input_vcf = SelectPreRealignmentVariants.selected_vcf,
+                        input_vcf_idx = SelectPreRealignmentVariants.selected_vcf_idx,
                         bwa_mem_index_image = bwa_mem_index_image,
                         compress_output = compress_output,
                         realignment_extra_args = realignment_extra_args,
@@ -408,55 +461,49 @@ workflow MultiSampleMutect2 {
                         memoryMB = filter_alignment_artifacts_mem,
                         cpu = filter_alignment_artifacts_cpu
                 }
+            }
 
-                call SelectVariants as SelectPostAlignmentVariants {
-                    input:
-                        ref_fasta = ref_fasta,
-                        ref_fasta_index = ref_fasta_index,
-                        ref_dict = ref_dict,
-                        filtered_vcf = FilterAlignmentArtifacts.filtered_vcf,
-                        filtered_vcf_idx = FilterAlignmentArtifacts.filtered_vcf_idx,
-                        exclude_filtered = true,
-                        keep_germline = keep_germline,
-                        compress_output = compress_output,
-                        select_variants_extra_args = select_variants_extra_args,
-                        runtime_params = standard_runtime,
-                        memoryMB = select_variants_mem
-                }
+            call MergeVCFs as MergeRealignmentFilteredVCFs {
+                input:
+                    input_vcfs = FilterAlignmentArtifacts.filtered_vcf,
+                    input_vcf_indices = FilterAlignmentArtifacts.filtered_vcf_idx,
+                    output_name = individual_id + ".filtered.selected.realignmentfiltered",
+                    compress_output = compress_output,
+                    runtime_params = standard_runtime,
+                    memoryMB = merge_vcfs_mem
+            }
+
+            call SelectVariants as SelectPostRealignmentVariants {
+                input:
+                    ref_fasta = ref_fasta,
+                    ref_fasta_index = ref_fasta_index,
+                    ref_dict = ref_dict,
+                    filtered_vcf = MergeRealignmentFilteredVCFs.merged_vcf,
+                    filtered_vcf_idx = MergeRealignmentFilteredVCFs.merged_vcf_idx,
+                    exclude_filtered = true,
+                    keep_germline = keep_germline,
+                    compress_output = compress_output,
+                    select_variants_extra_args = select_variants_extra_args,
+                    runtime_params = standard_runtime,
+                    memoryMB = select_variants_mem
             }
         }
     }
 
-    Array[File] selected_vcf = select_all(select_first([
-        if run_realignment_filter then SelectPostAlignmentVariants.selected_vcf
-        else if run_variant_filter then SelectPassingVariants.selected_vcf
-        else VariantCall.vcf
-    ]))
-    Array[File] selected_vcf_idx = select_all(select_first([
-        if run_realignment_filter then SelectPostAlignmentVariants.selected_vcf_idx
-        else if run_variant_filter then SelectPassingVariants.selected_vcf_idx
-        else VariantCall.vcf_idx
-    ]))
+    File selected_vcf = select_first([
+        if run_variant_filter then (
+            if run_realignment_filter then SelectPostRealignmentVariants.selected_vcf
+            else SelectPassingVariants.selected_vcf
+        ) else MergeVariantCallVCFs.merged_vcf
+    ])
+    File selected_vcf_idx = select_first([
+        if run_variant_filter then (
+            if run_realignment_filter then SelectPostRealignmentVariants.selected_vcf_idx
+            else SelectPassingVariants.selected_vcf_idx
+        ) else MergeVariantCallVCFs.merged_vcf_idx
+    ])
 
-    call MergeVCFs {
-    	input:
-            input_vcfs = selected_vcf,
-            input_vcf_indices = selected_vcf_idx,
-            output_name = individual_id + "_merged",
-            compress_output = compress_output,
-            runtime_params = standard_runtime,
-            memoryMB = merge_vcfs_mem
-    }
-
-    call MergeMutectStats {
-        input:
-            stats = VariantCall.vcf_stats,
-            individual_id = individual_id,
-            runtime_params = standard_runtime,
-            memoryMB = merge_mutect_stats_mem
-    }
-
-    String vcf_name = basename(basename(MergeVCFs.merged_vcf, ".gz"), ".vcf")
+    String vcf_name = basename(basename(selected_vcf, ".gz"), ".vcf")
 
     if (make_bamout) {
         Array[File] m2_bam_outs = select_all(VariantCall.bamout)
@@ -478,18 +525,18 @@ workflow MultiSampleMutect2 {
         # position and allele information to get annotations but does not annotate per
         # sample. We use a workaround by splitting the multi-sample VCF into individual
         # samples and run Funcotator on each VCF.
-        scatter (tumor_bam in tumor_bams) {
+        # In order to get proper annotations for the normal samples, they should be
+        # called in tumor-only mode.
+        scatter (tumor_bam_pair in zip(tumor_bams, tumor_bais)) {
+            File tumor_bam = tumor_bam_pair.left
+            File tumor_bai = tumor_bam_pair.right
+
             call GetSampleName as GetTumorSampleName {
                 input:
                     bam = tumor_bam,
                     runtime_params = standard_runtime,
                     memoryMB = get_sample_name_mem
             }
-        }
-
-        # In order to get proper annotations for the normal samples, they should be
-        # called in tumor-only mode.
-        scatter (tumor_sample_name in GetTumorSampleName.sample_name) {
             # We select the first normal sample to be the matched normal.
             # todo: select normal with greatest sequencing depth
             String normal_sample_name = (
@@ -503,12 +550,12 @@ workflow MultiSampleMutect2 {
                     ref_fasta = ref_fasta,
                     ref_fasta_index = ref_fasta_index,
                     ref_dict = ref_dict,
-                    filtered_vcf = MergeVCFs.merged_vcf,
-                    filtered_vcf_idx = MergeVCFs.merged_vcf_idx,
+                    filtered_vcf = selected_vcf,
+                    filtered_vcf_idx = selected_vcf_idx,
                     exclude_filtered = false,  # is already filtered
                     keep_germline = keep_germline,
-                    tumor_sample_name = tumor_sample_name,
-                    normal_sample_name = if normal_is_present then normal_sample_name else None,
+                    tumor_sample_name = GetTumorSampleName.sample_name,
+                    normal_sample_name = if normal_sample_name != "Unknown" then normal_sample_name else None,
                     compress_output = compress_output,
                     select_variants_extra_args = select_variants_extra_args,
                     runtime_params = standard_runtime,
@@ -522,14 +569,13 @@ workflow MultiSampleMutect2 {
                     ref_dict = ref_dict,
                     interval_list = interval_list,
                     input_vcf = SelectSampleVariants.selected_vcf,
-                    input_vcf_idx =SelectSampleVariants.selected_vcf_idx,
-                    output_base_name = tumor_sample_name + ".annotated",
-                    tumor_sample_name = tumor_sample_name,
-                    normal_sample_name = if normal_is_present then normal_sample_name else None,
+                    input_vcf_idx = SelectSampleVariants.selected_vcf_idx,
+                    output_base_name = GetTumorSampleName.sample_name + ".annotated",
+                    tumor_sample_name = GetTumorSampleName.sample_name,
+                    normal_sample_name = if normal_sample_name != "Unknown" then normal_sample_name else None,
                     transcript_list = funcotator_transcript_list,
                     data_sources_tar_gz = funcotator_data_sources_tar_gz,
                     use_gnomad = funcotator_use_gnomad,
-                    filter_funcotations = filter_funcotations,
                     compress_output = compress_output,
                     funcotate_extra_args = funcotate_extra_args,
                     runtime_params = standard_runtime,
@@ -539,17 +585,19 @@ workflow MultiSampleMutect2 {
     }
 
     output {
-        File merged_vcf = MergeVCFs.merged_vcf
-        File merged_vcf_idx = MergeVCFs.merged_vcf_idx
-        Array[File]? filtering_stats = FilterMutectCalls.filtering_stats
+        File unfiltered_vcf = MergeVariantCallVCFs.merged_vcf
+        File unfiltered_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx
+        File merged_vcf = selected_vcf
+        File merged_vcf_idx = selected_vcf_idx
         File mutect_stats = MergeMutectStats.merged_stats
         File? bamout = MergeBamOuts.merged_bam_out
         File? bamout_index = MergeBamOuts.merged_bam_out_index
+        File? filtering_stats = FilterMutectCalls.filtering_stats
         File? read_orientation_model_params = LearnReadOrientationModel.orientation_bias
         Array[File]? contamination_table = CalculateContamination.contamination_table
         Array[File]? tumor_segmentation = CalculateContamination.tumor_segmentation
-        Array[File]? funcotated_file = Funcotate.funcotated_output_file
-        Array[File]? funcotated_file_index = Funcotate.funcotated_output_file_index
+        Array[File?]? funcotated_file = Funcotate.funcotated_output_file
+        Array[File?]? funcotated_file_index = Funcotate.funcotated_output_file_index
     }
 }
 
@@ -704,7 +752,7 @@ task VariantCall {
 
     Boolean normal_is_present = defined(normal_bams) && (length(select_first([normal_bams])) > 0)
 
-    String output_vcf = "output" + if compress_output then ".vcf.gz" else ".vcf"
+    String output_vcf = individual_id + if compress_output then ".vcf.gz" else ".vcf"
     String output_vcf_idx = output_vcf + if compress_output then ".tbi" else ".idx"
     String output_stats = output_vcf + ".stats"
 
@@ -712,8 +760,11 @@ task VariantCall {
     Int germline_resource_size = if defined(germline_resource) then ceil(size(germline_resource, "GB")) else 0
     Int disk_space = disk_spaceGB + germline_resource_size
 
-    String make_bamout_arg = if make_bamout then "--bam-output " + individual_id + "_bamout.bam" else ""
-    String run_ob_filter_arg = if run_ob_filter then "--f1r2-tar-gz " + individual_id + "_f1r2_counts.tar.gz" else ""
+    String output_bam = individual_id + "_bamout.bam"
+    String output_bai = individual_id + "_bamout.bai"
+    String make_bamout_arg = if make_bamout then "--bam-output " + output_bam else ""
+    String output_artifact_priors = individual_id + "_f1r2_counts.tar.gz"
+    String run_ob_filter_arg = if run_ob_filter then "--f1r2-tar-gz " + output_artifact_priors else ""
 
     command <<<
         set -e
@@ -724,7 +775,7 @@ task VariantCall {
             ~{sep=" " prefix("-I ", tumor_bams)} \
             ~{true="-I " false="" normal_is_present}~{default="" sep=" -I " normal_bams} \
             ~{true="-normal " false="" normal_is_present}~{default="" sep=" -normal " normal_sample_names} \
-            --output ~{individual_id}.vcf \
+            --output ~{output_vcf} \
             ~{"--intervals " + interval_list} \
             ~{"-pon " + panel_of_normals} \
             ~{make_bamout_arg} \
@@ -737,17 +788,16 @@ task VariantCall {
             ~{"--native-pair-hmm-threads " + native_hmm_pair_threads} \
             ~{true="--native-pair-hmm-use-double-precision true" false="" native_pair_hmm_use_double_precision} \
             --seconds-between-progress-updates 300 \
-            --verbosity INFO \
             ~{m2_extra_args}
     >>>
 
     output {
-        File vcf = "~{individual_id}.vcf"
-        File vcf_idx = "~{individual_id}.vcf.idx"
-        File vcf_stats = "~{individual_id}.vcf.stats"
-        File? bamout = "~{individual_id}_bamout.bam"
-        File? baiout = "~{individual_id}_bamout.bai"
-        File m2_artifact_priors = "~{individual_id}_f1r2_counts.tar.gz"
+        File vcf = output_vcf
+        File vcf_idx = output_vcf_idx
+        File vcf_stats = output_stats
+        File? bamout = output_bam
+        File? baiout = output_bai
+        File m2_artifact_priors = output_artifact_priors
     }
 
     runtime {
@@ -817,7 +867,7 @@ task LearnReadOrientationModel {
         Array[File] f1r2_counts_tar_gz
 
         Runtime runtime_params
-        Int? memoryMB = 16384
+        Int? memoryMB = 8192
     }
 
     # Optional localization leads to cromwell error.
@@ -1031,11 +1081,15 @@ task FilterMutectCalls {
         Array[File]? tumor_segmentation
         File? mutect_stats
 
+        Int max_median_fragment_length_difference = 5000  # default: 10000
+        Int min_alt_median_base_quality = 20  # default: 20
+        Int min_alt_median_mapping_quality = 20  # default: -1
+
         Boolean compress_output = false
         String? m2_filter_extra_args
 
         Runtime runtime_params
-        Int? memoryMB = 2048
+        Int? memoryMB = 4096
     }
 
     # Optional localization leads to cromwell error.
@@ -1051,7 +1105,14 @@ task FilterMutectCalls {
         # mutect_stats: {localization_optional: true}
     }
 
-    Int disk_spaceGB = 2 * ceil(size(input_vcf, "GB")) + runtime_params.disk
+    Int disk_spaceGB = (
+        ceil(size(input_vcf, "GB"))
+        + if defined(orientation_bias) then ceil(size(orientation_bias, "GB")) else 0
+        + if defined(contamination_tables) then ceil(size(contamination_tables, "GB")) else 0
+        + if defined(tumor_segmentation) then ceil(size(tumor_segmentation, "GB")) else 0
+        + if defined(mutect_stats) then ceil(size(mutect_stats, "GB")) else 0
+        + runtime_params.disk
+    )
 
     String output_base_name = basename(basename(input_vcf, ".gz"), ".vcf") + ".filtered"
     String output_vcf = output_base_name + if compress_output then ".vcf.gz" else ".vcf"
@@ -1069,7 +1130,11 @@ task FilterMutectCalls {
             ~{true="--contamination-table " false="" defined(contamination_tables)}~{default="" sep=" --contamination-table " contamination_tables} \
             ~{true="--tumor-segmentation " false="" defined(tumor_segmentation)}~{default="" sep=" --tumor-segmentation " tumor_segmentation} \
             ~{"--stats " + mutect_stats} \
+            ~{"--max-median-fragment-length-difference " + max_median_fragment_length_difference} \
+            ~{"--min-median-base-quality " + min_alt_median_base_quality} \
+            ~{"--min-median-mapping-quality " + min_alt_median_mapping_quality} \
             --filtering-stats ~{output_base_name}.stats \
+            --seconds-between-progress-updates 300 \
             ~{m2_filter_extra_args}
   	>>>
 
@@ -1083,111 +1148,68 @@ task FilterMutectCalls {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        disks: "local-disk " + select_first([disk_spaceGB, runtime_params.disk]) + " HDD"
+        disks: "local-disk " + disk_spaceGB + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
         cpu: runtime_params.cpu
     }
 }
 
-task SelectVariants {
-    # Selects only variants with the PASS annotation given in Filter Mutect Calls.
-    # todo: add functionality to keep germline variants
+task VariantFiltration {
+    # Filter variants based on INFO and/or FORMAT annotations
 
     input {
-        File ref_fasta
-        File ref_fasta_index
-        File ref_dict
-        File filtered_vcf
-        File filtered_vcf_idx
-        Boolean exclude_filtered = true
-        Boolean keep_germline = false
+        File input_vcf
+        File input_vcf_idx
+
+        Int min_read_depth = 1
+        Int min_base_quality = 1
+        Int min_fragment_length = 1
+        Int min_mapping_quality = 1
+
         Boolean compress_output = false
-        String? tumor_sample_name
-        String? normal_sample_name
-        String? select_variants_extra_args
+        String? variant_filtration_extra_args
 
         Runtime runtime_params
-        Int? memoryMB = 512
+        Int? memoryMB = 2048
     }
 
-    parameter_meta {
-        ref_fasta: {localization_optional: true}
-        ref_fasta_index: {localization_optional: true}
-        ref_dict: {localization_optional: true}
-        filtered_vcf: {localization_optional: true}
-        filtered_vcf_idx: {localization_optional: true}
+    # Optional localization leads to cromwell error.
+    parameter_meta{
+        input_vcf: {localization_optional: true}
+        input_vcf_idx: {localization_optional: true}
     }
 
-    String uncompressed_filtered_vcf = basename(filtered_vcf, ".gz")
-    String base_name = if defined(tumor_sample_name) then tumor_sample_name else basename(uncompressed_filtered_vcf, ".vcf")
-    String output_base_name = base_name + ".selected"
-    String uncompressed_output_vcf = output_base_name + ".vcf"
-    String output_vcf = uncompressed_output_vcf + if compress_output then ".gz" else ""
+    Int disk_spaceGB = ceil(size(input_vcf, "GB")) + runtime_params.disk
+
+    String output_base_name = basename(basename(input_vcf, ".gz"), ".vcf") + ".hard_filtered"
+    String output_vcf = output_base_name + if compress_output then ".vcf.gz" else ".vcf"
     String output_vcf_idx = output_vcf + if compress_output then ".tbi" else ".idx"
-
-    Boolean invoke_select = (
-        defined(select_variants_extra_args)
-        || defined(tumor_sample_name)
-        || defined(normal_sample_name)
-        || compress_output
-    )
-
-    String dollar = "$"
 
 	command <<<
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
-            SelectVariants \
-            -R ~{ref_fasta} \
-            -V ~{filtered_vcf} \
-            --output ~{uncompressed_output_vcf} \
-            --exclude-filtered ~{exclude_filtered} \
-            --exclude-non-variants true \
-            ~{"--sample-name " + tumor_sample_name} \
-            ~{"--sample-name " + normal_sample_name} \
-            ~{select_variants_extra_args}
+            VariantFiltration \
+            --variant ~{input_vcf} \
+            --output ~{output_vcf} \
+            --filter-name "DP~{min_read_depth}" \
+            --filter-expression "DP > ~{min_read_depth - 1}" \
+            --filter-name "MQ~{min_base_quality}" \
+            --filter-expression "MQ > ~{min_base_quality - 1}" \
+            ~{variant_filtration_extra_args}
+  	>>>
 
-        # =======================================
-        # Hack to correct a SelectVariants output bug. When selecting for samples, this
-        # task only retains the first sample annotation in the header. Those annotations
-        # are important for Funcotator to fill the t_alt_count and t_ref_count coverage
-        # columns.
-        # Note: This can possibly be achieved by adding an appropriate --COMMENT flag.
-
-        if ~{defined(tumor_sample_name)} ; then
-            echo ">> Fixing tumor sample name in vcf header ... "
-            input_header=~{dollar}(grep "##tumor_sample=" ~{uncompressed_output_vcf})
-            corrected_header="##tumor_sample=~{tumor_sample_name}"
-            sed -i "s/~{dollar}input_header/~{dollar}corrected_header/g" ~{uncompressed_output_vcf}
-        fi
-        if ~{defined(normal_sample_name)} ; then
-            echo ">> Fixing normal sample name in vcf header ... "
-            input_header=~{dollar}(grep "##normal_sample=" ~{uncompressed_output_vcf})
-            corrected_header="##normal_sample=~{normal_sample_name}"
-            sed -i "s/~{dollar}input_header/~{dollar}corrected_header/g" ~{uncompressed_output_vcf}
-        fi
-        if ~{compress_output} ; then
-            echo ">> Compressing selected vcf."
-            bgzip -c ~{uncompressed_output_vcf} > ~{output_vcf}
-            gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
-                IndexFeatureFile \
-                --input ~{output_vcf} \
-                --output ~{output_vcf_idx}
-        fi
-	>>>
-
-	output {
-  		File selected_vcf = output_vcf
-  		File selected_vcf_idx = output_vcf_idx
-	}
+  	output {
+  		File filtered_vcf = output_vcf
+  		File filtered_vcf_idx = output_vcf_idx
+  	}
 
     runtime {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        disks: "local-disk " + runtime_params.disk + " HDD"
+        disks: "local-disk " + select_first([disk_spaceGB, runtime_params.disk]) + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
         cpu: runtime_params.cpu
@@ -1210,6 +1232,7 @@ task FilterAlignmentArtifacts {
 
         File? bwa_mem_index_image
 
+        Int max_reasonable_fragment_length = 10000 # default: 100000
         Boolean compress_output = false
         String? realignment_extra_args
 
@@ -1254,6 +1277,7 @@ task FilterAlignmentArtifacts {
             --reference ~{ref_fasta} \
             --bwa-mem-index-image ~{bwa_mem_index_image} \
             --output ~{output_vcf} \
+            --max-reasonable-fragment-length ~{max_reasonable_fragment_length} \
             --dont-skip-filtered-variants true \
             ~{realignment_extra_args}
     >>>
@@ -1271,6 +1295,112 @@ task FilterAlignmentArtifacts {
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
         cpu: cpu
+    }
+}
+
+task SelectVariants {
+    # Selects only variants with the PASS annotation given in Filter Mutect Calls.
+    # todo: add functionality to keep germline variants
+
+    input {
+        File? interval_list
+        File ref_fasta
+        File ref_fasta_index
+        File ref_dict
+        File filtered_vcf
+        File filtered_vcf_idx
+        Boolean exclude_filtered = true
+        Boolean keep_germline = false
+        Boolean compress_output = false
+        String? tumor_sample_name
+        String? normal_sample_name
+        String? select_variants_extra_args
+
+        Runtime runtime_params
+        Int? memoryMB = 512
+    }
+
+    parameter_meta {
+        ref_fasta: {localization_optional: true}
+        ref_fasta_index: {localization_optional: true}
+        ref_dict: {localization_optional: true}
+        filtered_vcf: {localization_optional: true}
+        filtered_vcf_idx: {localization_optional: true}
+    }
+
+    String uncompressed_filtered_vcf = basename(filtered_vcf, ".gz")
+    String base_name = if defined(tumor_sample_name) then tumor_sample_name else basename(uncompressed_filtered_vcf, ".vcf")
+    String output_base_name = base_name + ".selected"
+    String uncompressed_output_vcf = output_base_name + ".vcf"
+    String output_vcf = uncompressed_output_vcf + if compress_output then ".gz" else ""
+    String output_vcf_idx = output_vcf + if compress_output then ".tbi" else ".idx"
+
+    String dollar = "$"
+    # Remove variants from multi-sample calling that are not present in the selected
+    # tumor sample. We demand the allelic depth of the alt allele to be greater than 0.
+    String select_true_variants_arg = (
+        if defined(tumor_sample_name)
+        then "-select 'vc.getGenotype(\"" + tumor_sample_name + "\").getAD().1 > 0'"
+        else ""
+    )
+
+	command <<<
+        set -e
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
+            SelectVariants \
+            -R ~{ref_fasta} \
+            ~{"-L " + interval_list} \
+            -V ~{filtered_vcf} \
+            --output ~{uncompressed_output_vcf} \
+            --exclude-filtered ~{exclude_filtered} \
+            ~{"--sample-name " + tumor_sample_name} \
+            ~{"--sample-name " + normal_sample_name} \
+            ~{select_true_variants_arg} \
+            ~{select_variants_extra_args}
+
+        # =======================================
+        # Hack to correct a SelectVariants output bug. When selecting for samples, this
+        # task only retains the first sample annotation in the header. Those annotations
+        # are important for Funcotator to fill the t_alt_count and t_ref_count coverage
+        # columns.
+        # Note: This can possibly be achieved by adding an appropriate --COMMENT flag.
+
+        if ~{defined(tumor_sample_name)} ; then
+            echo ">> Fixing tumor sample name in vcf header ... "
+            input_header=~{dollar}(grep "##tumor_sample=" ~{uncompressed_output_vcf})
+            corrected_header="##tumor_sample=~{tumor_sample_name}"
+            sed -i "s/~{dollar}input_header/~{dollar}corrected_header/g" ~{uncompressed_output_vcf}
+        fi
+        if ~{defined(normal_sample_name)} ; then
+            echo ">> Fixing normal sample name in vcf header ... "
+            input_header=~{dollar}(grep "##normal_sample=" ~{uncompressed_output_vcf})
+            corrected_header="##normal_sample=~{normal_sample_name}"
+            sed -i "s/~{dollar}input_header/~{dollar}corrected_header/g" ~{uncompressed_output_vcf}
+        fi
+        if ~{compress_output} ; then
+            echo ">> Compressing selected vcf."
+            bgzip -c ~{uncompressed_output_vcf} > ~{output_vcf}
+            gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
+                IndexFeatureFile \
+                --input ~{output_vcf} \
+                --output ~{output_vcf_idx}
+        fi
+	>>>
+
+	output {
+  		File selected_vcf = output_vcf
+  		File selected_vcf_idx = output_vcf_idx
+	}
+
+    runtime {
+        docker: runtime_params.gatk_docker
+        bootDiskSizeGb: runtime_params.boot_disk_size
+        memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        disks: "local-disk " + runtime_params.disk + " HDD"
+        preemptible: runtime_params.preemptible
+        maxRetries: runtime_params.max_retries
+        cpu: runtime_params.cpu
     }
 }
 
@@ -1405,7 +1535,6 @@ task Funcotate {
         File? data_sources_tar_gz  # most recent version is downloaded if not chosen
         Boolean use_gnomad = false
         Boolean compress_output = false
-        Boolean filter_funcotations = false
         Array[String]? annotation_defaults
         Array[String]? annotation_overrides
         Array[String]? exclude_fields
@@ -1496,14 +1625,13 @@ task Funcotate {
             -V ~{input_vcf} \
             -O ~{output_file} \
             ~{"-L " + interval_list} \
-            --annotation-default tumor_barcode:~{default="Unknown" tumor_sample_name} \
-            --annotation-default normal_barcode:~{default="Unknown" normal_sample_name} \
             ~{"--transcript-selection-mode " + transcript_selection_mode} \
             ~{"--transcript-list " + transcript_list} \
+            --annotation-default tumor_barcode:~{default="Unknown" tumor_sample_name} \
+            --annotation-default normal_barcode:~{default="Unknown" normal_sample_name} \
             ~{true="--annotation-default " false="" defined(annotation_defaults)}~{default="" sep=" --annotation-default " annotation_defaults} \
             ~{true="--annotation-override " false="" defined(annotation_overrides)}~{default="" sep=" --annotation-override " annotation_overrides} \
             ~{true="--exclude-field " false="" defined(exclude_fields)}~{default="" sep=" --exclude-field " exclude_fields} \
-            ~{true="--remove-filtered-variants " false="" filter_funcotations} \
             ~{funcotate_extra_args}
 
         # Make sure we have a placeholder index for MAF files so this workflow doesn't fail:

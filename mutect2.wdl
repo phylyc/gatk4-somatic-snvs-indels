@@ -19,16 +19,15 @@ workflow Mutect2 {
         File? normal_bai
 
         # workflow options
-        Boolean run_contaminanation_model = true
-        Boolean run_orientation_bias_mixture_model_filter = true
+        Boolean run_contamination_model = true
+        Boolean run_orientation_bias_mixture_model = true
         Boolean run_variant_filter = true
         Boolean run_realignment_filter = true
         Boolean run_funcotator = true
         Boolean keep_germline = false  # not currently supported
-        Boolean compress_output = false
+        Boolean compress_output = true
         Boolean make_bamout = false
-        Boolean funcotator_use_gnomad = false
-        Boolean filter_funcotations = false
+        Boolean funcotator_use_gnomad = true
 
         # expose extra arguments for import of this workflow
         String? split_intervals_extra_args
@@ -111,8 +110,8 @@ workflow Mutect2 {
             normal_bams = if defined(normal_bam) then [normal_bam] else None,
             normal_bais = if defined(normal_bai) then [normal_bai] else None,
 
-            run_contaminanation_model = run_contaminanation_model,
-            run_orientation_bias_mixture_model_filter = run_orientation_bias_mixture_model_filter,
+            run_contamination_model = run_contamination_model,
+            run_orientation_bias_mixture_model = run_orientation_bias_mixture_model,
             run_variant_filter = run_variant_filter,
             run_realignment_filter = run_realignment_filter,
             run_funcotator = run_funcotator,
@@ -120,7 +119,6 @@ workflow Mutect2 {
             compress_output = compress_output,
             make_bamout = make_bamout,
             funcotator_use_gnomad = funcotator_use_gnomad,
-            filter_funcotations = filter_funcotations,
 
             split_intervals_extra_args = split_intervals_extra_args,
             m2_extra_args = m2_extra_args,
@@ -163,20 +161,22 @@ workflow Mutect2 {
             funcotate_mem = funcotate_mem,
 
             variant_call_cpu = variant_call_cpu,
-            filter_alignment_artifacts_cpu = filter_alignment_artifacts_cpu
+            filter_alignment_artifacts_cpu = filter_alignment_artifacts_cpu,
     }
 
     output {
+        File unfiltered_vcf = MultiSampleMutect2.unfiltered_vcf
+        File unfiltered_vcf_idx = MultiSampleMutect2.unfiltered_vcf_idx
         File merged_vcf = MultiSampleMutect2.merged_vcf
         File merged_vcf_idx = MultiSampleMutect2.merged_vcf_idx
-        Array[File]? filtering_stats = MultiSampleMutect2.filtering_stats
-        File mutect_stats = MultiSampleMutect2.merged_stats
-        File? bamout = MultiSampleMutect2.merged_bam_out
-        File? bamout_index = MultiSampleMutect2.merged_bam_out_index
-        File? read_orientation_model_params = MultiSampleMutect2.orientation_bias
+        File mutect_stats = MultiSampleMutect2.mutect_stats
+        File? bamout = MultiSampleMutect2.bamout
+        File? bamout_index = MultiSampleMutect2.bamout_index
+        File? filtering_stats = MultiSampleMutect2.filtering_stats
+        File? read_orientation_model_params = MultiSampleMutect2.read_orientation_model_params
         Array[File]? contamination_table = MultiSampleMutect2.contamination_table
         Array[File]? tumor_segmentation = MultiSampleMutect2.tumor_segmentation
-        Array[File]? funcotated_file = MultiSampleMutect2.funcotated_output_file
-        Array[File]? funcotated_file_index = MultiSampleMutect2.funcotated_output_file_index
+        Array[File?]? funcotated_file = MultiSampleMutect2.funcotated_file
+        Array[File?]? funcotated_file_index = MultiSampleMutect2.funcotated_file_index
     }
 }
