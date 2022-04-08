@@ -797,7 +797,7 @@ task VariantCall {
         File vcf_stats = output_stats
         File? bamout = output_bam
         File? baiout = output_bai
-        File m2_artifact_priors = output_artifact_priors
+        File? m2_artifact_priors = output_artifact_priors
     }
 
     runtime {
@@ -864,7 +864,7 @@ task LearnReadOrientationModel {
 
     input {
         String individual_id
-        Array[File] f1r2_counts_tar_gz
+        Array[File?] f1r2_counts_tar_gz  # optional due to optional M2 output
 
         Runtime runtime_params
         Int? memoryMB = 8192
@@ -875,14 +875,21 @@ task LearnReadOrientationModel {
     #     f1r2_counts_tar_gz: {localization_optional: true}
     # }
 
+    Array[File] f1r2_counts = select_first([f1r2_counts_tar_gz, []])
     String output_name = individual_id + "_artifact_priors.tar.gz"
 
     command <<<
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+
+        if ~{!defined(f1r2_counts_tar_gz)} ; then
+            echo "ERROR: f1r2_counts_tar_gz must be supplied."
+            false
+        fi
+
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             LearnReadOrientationModel \
-            ~{sep=" " prefix("-I ", f1r2_counts_tar_gz)} \
+            ~{sep=" " prefix("-I ", f1r2_counts)} \
             --output ~{output_name}
     >>>
 
