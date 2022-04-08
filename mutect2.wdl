@@ -2,8 +2,9 @@ version development
 
 ## For documentation, see mutect2_multi_sample.wdl
 
-import "mutect2_multi_sample.wdl" as msm2
-# import "https://github.com/phylyc/gatk4-somatic-snvs-indels/mutect2_multi_sample.wdl" as msm2
+#import "mutect2_multi_sample.wdl" as msm2
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2_multi_sample.wdl" as msm2
+
 
 workflow Mutect2 {
     input {

@@ -25,7 +25,8 @@ version development
 ## pertaining to the included programs.
 
 # import "mutect2.wdl" as m2
-import "https://github.com/phylyc/gatk4-somatic-snvs-indels/mutect2.wdl" as m2
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2.wdl" as m2
+
 
 workflow Mutect2NormalNormal {
 	input {
@@ -39,7 +40,7 @@ workflow Mutect2NormalNormal {
 
         # workflow options
         Boolean run_contaminanation_model = true
-        Boolean run_orientation_bias_mixture_model_filter = true
+        Boolean run_orientation_bias_mixture_model = true
         Boolean run_variant_filter = true
         Boolean run_realignment_filter = true
         Boolean keep_germline = false  # not currently supported
@@ -114,7 +115,7 @@ workflow Mutect2NormalNormal {
 					normal_bai = normal_bai,
 
 					run_contaminanation_model = run_contaminanation_model,
-					run_orientation_bias_mixture_model_filter = run_orientation_bias_mixture_model_filter,
+					run_orientation_bias_mixture_model = run_orientation_bias_mixture_model,
 					run_variant_filter = run_variant_filter,
 					run_realignment_filter = run_realignment_filter,
 					run_funcotator = false,

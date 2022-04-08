@@ -1,4 +1,4 @@
-version 1.0
+version development
 
 #  Create a Mutect2 panel of normals
 #
@@ -12,13 +12,14 @@ version 1.0
 #  which the wdl hard-codes to 0 because GenpmicsDBImport can't handle MNPs
 
 # import "mutect2_multi_sample.wdl" as msm2
-import "https://github.com/phylyc/gatk4-somatic-snvs-indels/mutect2_multi_sample.wdl" as msm2
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2_multi_sample.wdl" as msm2
+
 
 workflow Mutect2_Panel {
     input {
-        File? intervals
+        File? interval_list
         File ref_fasta
-        File ref_fai
+        File ref_fasta_index
         File ref_dict
 
         Array[File]+ normal_bams
@@ -27,7 +28,7 @@ workflow Mutect2_Panel {
         File germline_resource
         File germline_resource_idx
 
-        Boolean compress_output = false
+        Boolean compress_output = true
         String m2_extra_args = ""
         String pon_name
 
@@ -69,21 +70,21 @@ workflow Mutect2_Panel {
 
         call msm2.MultiSampleMutect2 {
             input:
-                intervals = intervals,
+                interval_list = interval_list,
                 ref_fasta = ref_fasta,
-                ref_fai = ref_fai,
+                ref_fasta_index = ref_fasta_index,
                 ref_dict = ref_dict,
                 individual_id = GetSampleName.sample_name,
                 tumor_bams = [normal_bam.left],
                 tumor_bais = [normal_bam.right],
                 run_contamination_model = false,
-                run_orientation_bias_mixture_model_filter = false,
+                run_orientation_bias_mixture_model = false,
                 run_variant_filter = false,
                 run_realignment_filter = false,
                 run_funcotator = false,
                 compress_output = compress_output,
                 scatter_count = scatter_count,
-                m2_extra_args = m2_extra_args + "--max-mnp-distance 0",
+                m2_extra_args = m2_extra_args + " --max-mnp-distance 0",
                 gatk_override = gatk_override,
                 gatk_docker = gatk_docker,
                 preemptible = preemptible,
@@ -98,7 +99,7 @@ workflow Mutect2_Panel {
     call msm2.SplitIntervals {
         input:
             ref_fasta = ref_fasta,
-            ref_fai = ref_fai,
+            ref_fasta_index = ref_fasta_index,
             ref_dict = ref_dict,
             scatter_count = num_contigs,
             split_intervals_extra_args = split_intervals_extra_args,
@@ -111,7 +112,7 @@ workflow Mutect2_Panel {
                 input_vcfs = MultiSampleMutect2.merged_vcf,
                 interval_list = scattered_intervals,
                 ref_fasta = ref_fasta,
-                ref_fai = ref_fai,
+                ref_fasta_index = ref_fasta_index,
                 ref_dict = ref_dict,
                 compress_output = compress_output,
                 gnomad = germline_resource,
@@ -133,8 +134,8 @@ workflow Mutect2_Panel {
     output {
         File pon = MergeVCFs.merged_vcf
         File pon_idx = MergeVCFs.merged_vcf_idx
-        Array[File] normal_calls = MultiSampleMutect2.filtered_vcf
-        Array[File] normal_calls_idx = MultiSampleMutect2.filtered_vcf_idx
+        Array[File] normal_calls = MultiSampleMutect2.merged_vcf
+        Array[File] normal_calls_idx = MultiSampleMutect2.merged_vcf
     }
 }
 
@@ -142,7 +143,7 @@ task CreatePanel {
     input {
         File interval_list
         File ref_fasta
-        File ref_fai
+        File ref_fasta_index
         File ref_dict
 
         Array[File]+ input_vcfs
@@ -152,6 +153,7 @@ task CreatePanel {
         File gnomad
         File gnomad_idx
 
+        Int min_sample_count = 2
         String? create_pon_extra_args
 
         # runtime
@@ -187,6 +189,7 @@ task CreatePanel {
             --germline-resource ~{gnomad} \
             -V gendb://pon_db \
             -O ~{output_file} \
+            --min-sample-count ~{min_sample_count} \
             ~{create_pon_extra_args}
     }
 

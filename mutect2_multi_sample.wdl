@@ -179,8 +179,8 @@ workflow MultiSampleMutect2 {
         Int filter_alignment_artifacts_cpu = 1  # good for PairHMM: 4
     }
 
-    Array[File] non_optional_normal_bams = select_first([normal_bams])
-    Array[File] non_optional_normal_bais = select_first([normal_bais])
+    Array[File] non_optional_normal_bams = select_first([normal_bams, []])
+    Array[File] non_optional_normal_bais = select_first([normal_bais, []])
 
     Boolean normal_is_present = defined(normal_bams) && (length(non_optional_normal_bams) > 0)
     Int num_bams = length(tumor_bams) + length(non_optional_normal_bams)
