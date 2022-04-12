@@ -95,7 +95,6 @@ workflow Mutect2 {
             bam = tumor_bam,
             runtime_params = standard_runtime
     }
-    String out_name = if defined(individual_id) then individual_id else  GetSampleName.sample_name
 
     call msm2.MultiSampleMutect2 {
         input:
@@ -104,7 +103,7 @@ workflow Mutect2 {
             ref_fasta_index = ref_fasta_index,
             ref_dict = ref_dict,
 
-            individual_id = out_name,
+            individual_id = select_first([individual_id, GetSampleName.sample_name]),
             tumor_bams = [tumor_bam],
             tumor_bais = [tumor_bai],
             normal_bams = if defined(normal_bam) then [normal_bam] else None,
