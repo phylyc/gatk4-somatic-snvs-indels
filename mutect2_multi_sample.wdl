@@ -877,12 +877,13 @@ task LearnReadOrientationModel {
 
     Array[File] f1r2_counts = select_first([f1r2_counts_tar_gz, []])
     String output_name = individual_id + "_artifact_priors.tar.gz"
+    Boolean f1r2_counts_empty = (length(f1r2_counts) == 0)
 
     command <<<
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
 
-        if ~{length(f1r2_counts) == 0} ; then
+        if ~{f1r2_counts_empty} ; then
             echo "ERROR: f1r2_counts_tar_gz must be supplied and non empty."
             false
         fi
