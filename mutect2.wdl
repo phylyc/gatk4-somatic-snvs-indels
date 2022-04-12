@@ -42,8 +42,8 @@ workflow Mutect2 {
         File? panel_of_normals_idx
         File? germline_resource
         File? germline_resource_tbi
-		File? variants_for_contamination
-		File? variants_for_contamination_idx
+        File? variants_for_contamination
+        File? variants_for_contamination_idx
         File? bwa_mem_index_image
         File? funcotator_transcript_list
         File? funcotator_data_sources_tar_gz
@@ -130,8 +130,8 @@ workflow Mutect2 {
             panel_of_normals_idx = panel_of_normals_idx,
             germline_resource = germline_resource,
             germline_resource_tbi = germline_resource_tbi,
-		    variants_for_contamination = variants_for_contamination,
-		    variants_for_contamination_idx = variants_for_contamination_idx,
+            variants_for_contamination = variants_for_contamination,
+            variants_for_contamination_idx = variants_for_contamination_idx,
             bwa_mem_index_image = bwa_mem_index_image,
             funcotator_transcript_list = funcotator_transcript_list,
             funcotator_data_sources_tar_gz = funcotator_data_sources_tar_gz,
