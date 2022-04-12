@@ -38,7 +38,7 @@ workflow Mutect2NormalNormal {
         Array[File]+ bais
 
         # workflow options
-        Boolean run_contaminanation_model = true
+        Boolean run_contamination_model = true
         Boolean run_orientation_bias_mixture_model = true
         Boolean run_variant_filter = true
         Boolean run_realignment_filter = true
@@ -113,7 +113,7 @@ workflow Mutect2NormalNormal {
 					normal_bam = normal_bam,
 					normal_bai = normal_bai,
 
-					run_contaminanation_model = run_contaminanation_model,
+					run_contamination_model = run_contamination_model,
 					run_orientation_bias_mixture_model = run_orientation_bias_mixture_model,
 					run_variant_filter = run_variant_filter,
 					run_realignment_filter = run_realignment_filter,
