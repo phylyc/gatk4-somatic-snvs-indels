@@ -5,7 +5,6 @@ version development
 #import "mutect2_multi_sample.wdl" as msm2
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2_multi_sample.wdl" as msm2
 
-
 workflow Mutect2 {
     input {
         File? interval_list
@@ -66,8 +65,8 @@ workflow Mutect2 {
         Int get_pileup_summaries_mem = 2048  # needs at least 2G
         Int gather_pileup_summaries_mem = 512  # 64
         Int calculate_contamination_mem = 512
-        Int filter_mutect_calls_mem = 512
-        Int select_variants_mem = 512
+        Int filter_mutect_calls_mem = 4096
+        Int select_variants_mem = 2048
         Int filter_alignment_artifacts_mem = 4096
         Int merge_vcfs_mem = 512
         Int merge_mutect_stats_mem = 512 # 64
@@ -105,7 +104,7 @@ workflow Mutect2 {
             ref_fasta_index = ref_fasta_index,
             ref_dict = ref_dict,
 
-            individual_id = individual_id,
+            individual_id = out_name,
             tumor_bams = [tumor_bam],
             tumor_bais = [tumor_bai],
             normal_bams = if defined(normal_bam) then [normal_bam] else None,

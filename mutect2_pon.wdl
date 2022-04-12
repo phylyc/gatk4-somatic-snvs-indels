@@ -12,8 +12,7 @@ version development
 #  which the wdl hard-codes to 0 because GenpmicsDBImport can't handle MNPs
 
 # import "mutect2_multi_sample.wdl" as msm2
-import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2_multi_sample.wdl" as msm2
-
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2.wdl" as m2
 
 workflow Mutect2_Panel {
     input {
@@ -62,21 +61,14 @@ workflow Mutect2_Panel {
     }
 
     scatter (normal_bam in zip(normal_bams, normal_bais)) {
-        call msm2.GetSampleName {
-            input:
-                bam = normal_bam.left,
-                runtime_params = standard_runtime,
-        }
-
-        call msm2.MultiSampleMutect2 {
+        call m2.Mutect2 {
             input:
                 interval_list = interval_list,
                 ref_fasta = ref_fasta,
                 ref_fasta_index = ref_fasta_index,
                 ref_dict = ref_dict,
-                individual_id = GetSampleName.sample_name,
-                tumor_bams = [normal_bam.left],
-                tumor_bais = [normal_bam.right],
+                tumor_bam = normal_bam.left,
+                tumor_bai = normal_bam.right,
                 run_contamination_model = false,
                 run_orientation_bias_mixture_model = false,
                 run_variant_filter = false,
@@ -96,7 +88,7 @@ workflow Mutect2_Panel {
         "--subdivision-mode BALANCING_WITHOUT_INTERVAL_SUBDIVISION"
         + " --min-contig-size " + min_contig_size
     )
-    call msm2.SplitIntervals {
+    call m2.SplitIntervals {
         input:
             ref_fasta = ref_fasta,
             ref_fasta_index = ref_fasta_index,
@@ -109,7 +101,8 @@ workflow Mutect2_Panel {
     scatter (scattered_intervals in SplitIntervals.interval_files) {
         call CreatePanel {
             input:
-                input_vcfs = MultiSampleMutect2.merged_vcf,
+                input_vcfs = Mutect2.merged_vcf,
+                input_vcf_indices = Mutect2.merged_vcf_idx,
                 interval_list = scattered_intervals,
                 ref_fasta = ref_fasta,
                 ref_fasta_index = ref_fasta_index,
@@ -122,7 +115,7 @@ workflow Mutect2_Panel {
         }
     }
 
-    call msm2.MergeVCFs {
+    call m2.MergeVCFs {
         input:
             input_vcfs = CreatePanel.output_vcf,
             input_vcf_indices = CreatePanel.output_vcf_index,
@@ -134,8 +127,8 @@ workflow Mutect2_Panel {
     output {
         File pon = MergeVCFs.merged_vcf
         File pon_idx = MergeVCFs.merged_vcf_idx
-        Array[File] normal_calls = MultiSampleMutect2.merged_vcf
-        Array[File] normal_calls_idx = MultiSampleMutect2.merged_vcf
+        Array[File] normal_calls = Mutect2.merged_vcf
+        Array[File] normal_calls_idx = Mutect2.merged_vcf
     }
 }
 
@@ -147,6 +140,7 @@ task CreatePanel {
         File ref_dict
 
         Array[File]+ input_vcfs
+        Array[File]+ input_vcf_indices
         String output_vcf_name
 
         Boolean compress_output = false
@@ -161,10 +155,8 @@ task CreatePanel {
         Int memoryMB = 8186
     }
 
+    # GenomicsDB requires that the reference be a local file.
     parameter_meta{
-        ref_fasta: {localization_optional: true}
-        ref_fasta_index: {localization_optional: true}
-        ref_dict: {localization_optional: true}
         gnomad: {localization_optional: true}
         gnomad_idx: {localization_optional: true}
     }

@@ -27,7 +27,6 @@ version development
 # import "mutect2.wdl" as m2
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2.wdl" as m2
 
-
 workflow Mutect2NormalNormal {
 	input {
 		File? interval_list
@@ -80,8 +79,8 @@ workflow Mutect2NormalNormal {
         Int get_pileup_summaries_mem = 2048  # needs at least 2G
         Int gather_pileup_summaries_mem = 512  # 64
         Int calculate_contamination_mem = 512
-        Int filter_mutect_calls_mem = 512
-        Int select_variants_mem = 512
+        Int filter_mutect_calls_mem = 4096
+        Int select_variants_mem = 2048
         Int filter_alignment_artifacts_mem = 4096
         Int merge_vcfs_mem = 512
         Int merge_mutect_stats_mem = 512 # 64
@@ -95,7 +94,7 @@ workflow Mutect2NormalNormal {
 	Array[Pair[File, File]] bam_pairs = cross(bams, bams)
 	Array[Pair[File, File]] bai_pairs = cross(bais, bais)
 
-	scatter(n in range(length(bam_pairs))) {
+	scatter (n in range(length(bam_pairs))) {
 	    File tumor_bam = bam_pairs[n].left
 	    File normal_bam = bam_pairs[n].right
 	    File tumor_bai = bai_pairs[n].left
@@ -189,6 +188,42 @@ workflow Mutect2NormalNormal {
 	}
 }
 
+task CountFalsePositives {
+	input {
+		File? interval_list
+		File ref_fasta
+		File ref_fasta_index
+		File ref_dict
+		File vcf
+		File vcf_idx
+
+		File? gatk_override
+		String gatk_docker
+	}
+
+	command <<<
+		export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
+
+		gatk --java-options "-Xmx4g" \
+			CountFalsePositives \
+			-V ~{vcf} \
+			-R ~{ref_fasta} \
+			~{"-L " + interval_list} \
+			-O false-positives.txt \
+	>>>
+
+    runtime {
+        docker: gatk_docker
+        bootDiskSizeGb: 12
+        memory: "5 GB"
+        disks: "local-disk " + 5 + " HDD"
+    }
+
+	output {
+		File false_positive_counts = "false-positives.txt"
+	}
+}
+
 task GatherTables {
 	input {
 		# we assume that each table consists of two lines: one header line and one record
@@ -198,7 +233,7 @@ task GatherTables {
 	String dollar = "$"
 
 	command <<<
-	    # extract the header from one of the files
+		# extract the header from one of the files
 		head -n 1 ~{tables[0]} > summary.txt
 
 		# then append the record from each table
@@ -215,40 +250,5 @@ task GatherTables {
 
 	output {
 		File summary = "summary.txt"
-	}
-}
-
-task CountFalsePositives {
-	input {
-		File? interval_list
-		File ref_fasta
-		File ref_fasta_index
-		File ref_dict
-		File vcf
-		File vcf_idx
-
-		File? gatk_override
-		String gatk_docker
-	}
-
-	command <<<
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
-
-	    gatk --java-options "-Xmx4g" CountFalsePositives \
-		    -V ${vcf} \
-		    -R ${ref_fasta} \
-		    ~{"-L " + interval_list} \
-		    -O false-positives.txt \
-	>>>
-
-    runtime {
-        docker: gatk_docker
-        bootDiskSizeGb: 12
-        memory: "5 GB"
-        disks: "local-disk " + 5 + " HDD"
-    }
-
-	output {
-		File false_positive_counts = "false-positives.txt"
 	}
 }

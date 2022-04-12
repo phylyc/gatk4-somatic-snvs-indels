@@ -882,8 +882,8 @@ task LearnReadOrientationModel {
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
 
-        if ~{!defined(f1r2_counts_tar_gz)} ; then
-            echo "ERROR: f1r2_counts_tar_gz must be supplied."
+        if ~{length(f1r2_counts) == 0} ; then
+            echo "ERROR: f1r2_counts_tar_gz must be supplied and non empty."
             false
         fi
 
