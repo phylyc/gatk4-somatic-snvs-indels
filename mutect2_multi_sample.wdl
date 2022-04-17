@@ -158,7 +158,7 @@ workflow MultiSampleMutect2 {
         Int emergency_extra_diskGB = 0
 
         # memory assignments in MB
-        Int additional_per_sample_mem = 256  # this actually can depend on sample size (WES vs WGS)
+        Int additional_per_sample_mem = 256  # this actually can depend on bam size (WES vs WGS)
         Int split_intervals_mem = 512  # 64
         Int get_sample_name_mem = 512  # 256
         Int variant_call_base_mem = 4096
@@ -357,7 +357,7 @@ workflow MultiSampleMutect2 {
         call LearnReadOrientationModel {
             input:
                 individual_id = individual_id,
-                f1r2_counts_tar_gz = VariantCall.m2_artifact_priors,
+                f1r2_counts = select_all(VariantCall.m2_artifact_priors),
                 runtime_params = standard_runtime,
                 memoryMB = learn_read_orientation_model_base_mem + num_bams * additional_per_sample_mem
         }
@@ -506,14 +506,12 @@ workflow MultiSampleMutect2 {
     String vcf_name = basename(basename(selected_vcf, ".gz"), ".vcf")
 
     if (make_bamout) {
-        Array[File] m2_bam_outs = select_all(VariantCall.bamout)
-
         call MergeBamOuts {
             input:
                 ref_fasta = ref_fasta,
                 ref_fasta_index = ref_fasta_index,
                 ref_dict = ref_dict,
-                m2_bam_outs = m2_bam_outs,
+                m2_bam_outs = select_all(VariantCall.bamout),
                 output_vcf_name = vcf_name,
                 runtime_params = standard_runtime,
                 memoryMB = merge_bams_mem
@@ -864,7 +862,7 @@ task LearnReadOrientationModel {
 
     input {
         String individual_id
-        Array[File?] f1r2_counts_tar_gz  # optional due to optional M2 output
+        Array[File] f1r2_counts
 
         Runtime runtime_params
         Int? memoryMB = 8192
@@ -872,10 +870,9 @@ task LearnReadOrientationModel {
 
     # Optional localization leads to cromwell error.
     # parameter_meta {
-    #     f1r2_counts_tar_gz: {localization_optional: true}
+    #     f1r2_counts: {localization_optional: true}
     # }
 
-    Array[File] f1r2_counts = select_first([f1r2_counts_tar_gz, []])
     String output_name = individual_id + "_artifact_priors.tar.gz"
     Boolean f1r2_counts_empty = (length(f1r2_counts) == 0)
 
