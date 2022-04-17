@@ -1,18 +1,19 @@
 version development
 
-#  Create a Mutect2 panel of normals
-#
-#  Description of inputs
-#  intervals: genomic intervals
-#  ref_fasta, ref_fai, ref_dict: reference genome, index, and dictionary
-#  normal_bams: arrays of normal bams
-#  scatter_count: number of parallel jobs when scattering over intervals
-#  pon_name: the resulting panel of normals is {pon_name}.vcf
-#  m2_extra_args: additional command line parameters for Mutect2.  This should not involve --max-mnp-distance,
-#  which the wdl hard-codes to 0 because GenpmicsDBImport can't handle MNPs
+## Create a Mutect2 panel of normals
+##
+## Description of inputs
+## intervals: genomic intervals
+## ref_fasta, ref_fai, ref_dict: reference genome, index, and dictionary
+## normal_bams: arrays of normal bams
+## scatter_count: number of parallel jobs when scattering over intervals
+## pon_name: the resulting panel of normals is {pon_name}.vcf
+## m2_extra_args: additional command line parameters for Mutect2. This should not
+## involve --max-mnp-distance, which the wdl hard-codes to 0 because GenpmicsDBImport
+## can't handle MNPs
 
 # import "mutect2_multi_sample.wdl" as msm2
-import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2.wdl" as m2
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2_multi_sample.wdl" as msm2
 
 workflow Mutect2_Panel {
     input {
@@ -61,14 +62,21 @@ workflow Mutect2_Panel {
     }
 
     scatter (normal_bam in zip(normal_bams, normal_bais)) {
-        call m2.Mutect2 {
+        call msm2.GetSampleName {
+            input:
+                bam = normal_bam.left,
+                runtime_params = standard_runtime,
+        }
+
+        call msm2.MultiSampleMutect2 {
             input:
                 interval_list = interval_list,
                 ref_fasta = ref_fasta,
                 ref_fasta_index = ref_fasta_index,
                 ref_dict = ref_dict,
-                tumor_bam = normal_bam.left,
-                tumor_bai = normal_bam.right,
+                individual_id = GetSampleName.sample_name,
+                tumor_bams = [normal_bam.left],
+                tumor_bais = [normal_bam.right],
                 run_contamination_model = false,
                 run_orientation_bias_mixture_model = false,
                 run_variant_filter = false,
@@ -88,7 +96,7 @@ workflow Mutect2_Panel {
         "--subdivision-mode BALANCING_WITHOUT_INTERVAL_SUBDIVISION"
         + " --min-contig-size " + min_contig_size
     )
-    call m2.SplitIntervals {
+    call msm2.SplitIntervals {
         input:
             ref_fasta = ref_fasta,
             ref_fasta_index = ref_fasta_index,
@@ -101,8 +109,8 @@ workflow Mutect2_Panel {
     scatter (scattered_intervals in SplitIntervals.interval_files) {
         call CreatePanel {
             input:
-                input_vcfs = Mutect2.merged_vcf,
-                input_vcf_indices = Mutect2.merged_vcf_idx,
+                input_vcfs = MultiSampleMutect2.merged_vcf,
+                input_vcf_indices = MultiSampleMutect2.merged_vcf_idx,
                 interval_list = scattered_intervals,
                 ref_fasta = ref_fasta,
                 ref_fasta_index = ref_fasta_index,
@@ -115,7 +123,7 @@ workflow Mutect2_Panel {
         }
     }
 
-    call m2.MergeVCFs {
+    call msm2.MergeVCFs {
         input:
             input_vcfs = CreatePanel.output_vcf,
             input_vcf_indices = CreatePanel.output_vcf_index,
@@ -127,8 +135,8 @@ workflow Mutect2_Panel {
     output {
         File pon = MergeVCFs.merged_vcf
         File pon_idx = MergeVCFs.merged_vcf_idx
-        Array[File] normal_calls = Mutect2.merged_vcf
-        Array[File] normal_calls_idx = Mutect2.merged_vcf
+        Array[File] normal_calls = MultiSampleMutect2.merged_vcf
+        Array[File] normal_calls_idx = MultiSampleMutect2.merged_vcf
     }
 }
 
@@ -147,6 +155,8 @@ task CreatePanel {
         File gnomad
         File gnomad_idx
 
+        # UMCCR found that 5 is optimizing the F2 score, but not by much compared to 2:
+        # https://umccr.org/blog/panel-of-normals/
         Int min_sample_count = 2
         String? create_pon_extra_args
 
