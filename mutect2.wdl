@@ -106,8 +106,8 @@ workflow Mutect2 {
             individual_id = select_first([individual_id, GetSampleName.sample_name]),
             tumor_bams = [tumor_bam],
             tumor_bais = [tumor_bai],
-            normal_bams = if defined(normal_bam) then [normal_bam] else None,
-            normal_bais = if defined(normal_bai) then [normal_bai] else None,
+            normal_bams = if defined(normal_bam) then select_all([normal_bam]) else None,
+            normal_bais = if defined(normal_bai) then select_all([normal_bai]) else None,
 
             run_contamination_model = run_contamination_model,
             run_orientation_bias_mixture_model = run_orientation_bias_mixture_model,
