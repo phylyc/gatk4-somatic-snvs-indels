@@ -17,7 +17,7 @@ version development
 # import "mutect2_multi_sample.wdl" as msm2
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2_pon.wdl" as m2pon
 
-workflow Mutect2_Panel {
+workflow Mutect2_Panel_from_File {
     input {
         File? interval_list
         File ref_fasta
