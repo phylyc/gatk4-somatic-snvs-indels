@@ -36,7 +36,7 @@ workflow Mutect2_Panel {
         Int num_contigs = 24
 
         # runtime
-        Int scatter_count = 42
+        Int scatter_count = 10
         String gatk_docker = "broadinstitute/gatk"
         File? gatk_override
         Int preemptible = 2
@@ -171,8 +171,11 @@ task CreatePanel {
         gnomad_idx: {localization_optional: true}
     }
 
-    String output_file = output_vcf_name + ".vcf"
-    String output_file_idx = output_file + ".idx"
+    Int vcf_size = 2 * ceil(size(input_vcfs, "GB"))
+    Int disk_size = runtime_params.disk + vcf_size
+
+    String output_file = output_vcf_name + ".vcf.gz"
+    String output_file_idx = output_file + ".tbi"
 
     command {
         set -e
@@ -199,7 +202,7 @@ task CreatePanel {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: memoryMB + " MB"
-        disks: "local-disk " + runtime_params.disk + " HDD"
+        disks: "local-disk " + disk_size + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
         cpu: runtime_params.cpu
