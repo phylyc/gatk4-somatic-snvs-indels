@@ -172,7 +172,7 @@ task CreatePanel {
     }
 
     Int vcf_size = 2 * ceil(size(input_vcfs, "GB"))
-    Int disk_size = runtime_params.disk + vcf_size
+    Int disk_size = runtime_params.disk + vcf_size + ceil(length(input_vcfs) / 10)
 
     String output_file = output_vcf_name + ".vcf.gz"
     String output_file_idx = output_file + ".tbi"
