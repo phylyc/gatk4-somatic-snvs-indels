@@ -3,88 +3,142 @@
 ### Purpose : 
 Workflows for somatic short variant analysis with GATK4. 
 
-### mutect2 :
-Implements Somatic short variant discovery using the GATK Best Practices.  
+## mutect2 :
+Implements somatic short variant discovery using the GATK Best Practices. If no patient-matched normal is specified, it should be expected that the variant calls of tumor samples contain ~30k rare germline variants.
 
-#### Requirements/expectations
-- Tumor bam and index
-- Normal bam and index
+#### Requirements/expectations (optional)
+- tumor bam and index
+- (normal bam and index)
+- (Panel of Normals to filter sequencing platform artifacts)
+- (germline resource (gnomAD) to filter common germline variants)
+- (biallelic variants for contamination to estimate contamination between samples)
+- (bwa_mem index image to filter alignment artifacts)
+
+#### Outputs (optional)
+- unfiltered vcf and index
+- Mutect2 stats
+- (bam file as aligned by Mutect2)
+- (filtered vcf and index)
+- (filtering stats)
+- (read orientation bias model parameters)
+- (contamination tables)
+- (segmentation tables)
+- (funcotated VCF or MAF)
+
+## mutect2_multi_sample :
+Implements somatic short variant discovery using the GATK Best Practices. Using multiple 
+samples of the same patient increases the sensitivity for variant detection in each sample.
+
+#### Requirements/expectations (optional)
+- array of tumor bams and indices
+- (array of normal bams and indices)
+
+The other optional arguments are the same as above.
 
 #### Outputs 
-- unfiltered vcf 
-- unfiltered vcf index 
-- filtered vcf 
-- filtered vcf index 
+Same as above.
 
-### mutect2_pon :
-Creates a Panel of Norms to be implemented in somatic short variant discovery. 
+## mutect2_pon :
+Creates a Panel of Normals to be implemented in somatic short variant discovery. 
 
 #### Requirements/expectations
-- Normal bams and index
+- array of normal bams and indices
+- germline resource (gnomAD) to filter common germline variants
 
 #### Outputs 
-- PON vcf and index
-- Normal calls vcf and index
+- PoN vcf and index
+- normal variant call vcfs and indices
 
-### mutect2-normal-normal :
-Used to validate mutect2 workflow.
+## mutect2_pon_from_file :
+Creates a Panel of Normals to be implemented in somatic short variant discovery. Sometimes
+it is easier to supply a file containing the path to a normal bam on each line.
 
 #### Requirements/expectations
-- One analysis-ready BAM file (and its index) for each replicate
+- file with paths to normal bams and indices
+- germline resource (gnomAD) to filter common germline variants
+
+#### Outputs 
+Same as above.
+
+## mutect2_pon_from_vcfs :
+Creates a Panel of Normals to be implemented in somatic short variant discovery. This workflow can be used if variant calls from normal samples are already available.
+
+#### Requirements/expectations
+- file with paths to vcfs from Mutect2 calls on normal bams and indices
+- germline resource (gnomAD) to filter common germline variants
+
+#### Outputs 
+Same as above.
+
+## mutect2-normal-normal :
+Used to validate the mutect2 workflow. Calls the mutect2 workflow on all combination of
+pairs as tumor-normal pairs of the bam file and its replicates.
+
+#### Requirements/expectations
+- array of one analysis-read bam file and its replicates (and their indices)
 
 #### Outputs
-- False Positive VCF files and its index with summary  
-     
+- false positive VCF files and their indices with summary 
+- false positive counts
+
 ### Software version requirements :
-- GATK 4.2.5.0
+- GATK >=4.2.6.1
 
 Cromwell version support 
 - Successfully tested on v71
 
 
-### Parameter descriptions :
-#### mutect2 (single pair/sample)  
-- ``Mutect2.gatk4_jar`` -- Location *within the docker file* of the GATK4 jar file.  If you wish you to use a different jar file, such as one on your local filesystem or a google bucket, specify that location with ``Mutect2_Multi.gatk4_jar_override``.  This parameter is ignored if ``Mutect2_Multi.gatk4_jar_override`` is specified.
-- ``Mutect2.intervals`` -- A file listing genomic intervals to search for somatic mutations.  This should be in the standard GATK4 format.
-- ``Mutect2.ref_fasta`` 	-- reference fasta.  In google bucket:  ``gs://gatk-best-practices/somatic-b37/Homo_sapiens_assembly19.fasta``
-- ``Mutect2.ref_fasta_index`` -- In google bucket:  ``gs://gatk-best-practices/somatic-b37/Homo_sapiens_assembly19.fasta.fai``
-- ``Mutect2.ref_dict`` -- In google bucket:  ``gs://gatk-best-practices/somatic-b37/Homo_sapiens_assembly19.dict``
+## Parameter descriptions :
+#### mutect2 (single pair/sample)
+Primary inputs:
+- ``Mutect2.intervals`` -- A file listing genomic intervals to search for somatic mutations. This should be in the standard GATK4 format.
+- ``Mutect2.ref_fasta`` -- reference fasta. In google bucket:  ``gs://gatk-best-practices/somatic-b37/Homo_sapiens_assembly19.fasta``
+- ``Mutect2.ref_fasta_index`` -- In google bucket: ``gs://gatk-best-practices/somatic-b37/Homo_sapiens_assembly19.fasta.fai``
+- ``Mutect2.ref_dict`` -- In google bucket: ``gs://gatk-best-practices/somatic-b37/Homo_sapiens_assembly19.dict``
 - ``Mutect2.tumor_bam`` -- File path or storage location (depending on backend) of the tumor bam file.
 - ``Mutect2.tumor_bam_index`` -- File path or storage location (depending on backend) of the tumor bam file index.
 - ``Mutect2.normal_bam`` -- (optional) File path or storage location (depending on backend) of the normal bam file.
-- ``Mutect2.normal_bam_index`` -- (optional, but required if ``Mutect2.normal_bam`` is specified)  File path or storage location (depending on backend) of the normal bam file index.
-- ``Mutect2.pon`` -- (optional) Panel of normals VCF to use for false positive reduction.
-- ``Mutect2.pon_index`` -- (optional, but required if ``Mutect2_Multi.pon`` is specified)  VCF index for the panel of normals.  Please see GATK4 tool ``IndexFeatureFile`` for creation of an index.
-- ``Mutect2.scatter_count`` -- Number of executions to split the Mutect2 task into.  The more you put here, the faster Mutect2 will return results, but at a higher cost of resources.
-- ``Mutect2.gnomad`` -- (optional)  gnomAD vcf containing population allele frequencies (AF) of common and rare alleles.  Download an exome or genome sites vcf [here](http://gnomad.broadinstitute.org/downloads).  Essential for determining possible germline variants in tumor
-- ``Mutect2.gnomad_index`` -- (optional, but required if ``Mutect2_Multi.gnomad`` is specified)  VCF index for gnomAD.  Please see GATK4 tool ``IndexFeatureFile`` for creation of an index.
-- ``Mutect2.variants_for_contamination`` -- (optional)  vcf containing population allele frequencies (AF) of common SNPs.  If omitted, cross-sample contamination will not be calculated and contamination filtering will not be applied.  This can be generated from a gnomAD vcf using the GATK4 tool ``SelectVariants`` with the argument ``--select "AF > 0.05"``.  For speed, one can get very good results using only SNPs on chromosome 1.  For example, ``java -jar $gatk SelectVariants -V gnomad.vcf -L 1 --select "AF > 0.05" -O variants_for_contamination.vcf``.
-- ``Mutect2.variants_for_contamination_index`` -- (optional, but required if ``Mutect2_Multi.variants_for_contamination`` is specified)  VCF index for contamination variants.  Please see GATK4 tool ``IndexFeatureFile`` for creation of an index.
-- ``Mutect2.is_run_orientation_bias_filter`` -- ``true``/``false`` whether the orientation bias filter should be run.
-- ``Mutect2.is_run_oncotator`` -- ``true``/``false`` whether the command-line version of oncotator should be run.  If ``false``, ``Mutect2_Multi.oncotator_docker`` parameter is ignored.
-- ``Mutect2.gatk_docker`` -- Docker image to use for Mutect2 tasks.  This is only used for backends configured to use docker.
-- ``Mutect2.oncotator_docker`` -- (optional)  A GATK4 jar file to be used instead of the jar file in the docker image.  (See ``Mutect2_Multi.gatk4_jar``)  This can be very useful for developers.  Please note that you need to be careful that the docker image you use is compatible with the GATK4 jar file given here -- no automated checks are made.
-- ``Mutect2.gatk4_jar_override`` -- (optional)  A GATK4 jar file to be used instead of the jar file in the docker image.  (See ``Mutect2_Multi.gatk4_jar``)  This can be very useful for developers.  Please note that you need to be careful that the docker image you use is compatible with the GATK4 jar file given here 
-- ``Mutect2.preemptible_attempts`` -- Number of times to attempt running a task on a preemptible VM.  This is only used for cloud backends in cromwell and is ignored for local and SGE backends.
-- ``Mutect2.onco_ds_tar_gz`` -- (optional)  A tar.gz file of the oncotator datasources -- often quite large (>15GB).  This will be uncompressed as part of the oncotator task.  Depending on backend used, this can be specified as a path on the local filesystem of a cloud storage container (e.g. gs://...).  Typically the Oncotator default datasource can be downloaded at ``ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/oncotator/``.  Do not put the FTP URL into the json file.
-- ``Mutect2.onco_ds_local_db_dir`` -- "(optional)  A direct path to the Oncotator datasource directory (uncompressed).  While this is the fastest approach, it cannot be used with docker unless your docker image already has the datasources in it.  For cromwell backends without docker, this can be a local filesystem path.  *This cannot be a cloud storage location*
+- ``Mutect2.normal_bam_index`` -- (optional, but required if ``Mutect2.normal_bam`` is specified) File path or storage location (depending on backend) of the normal bam file index.
 
- Note:  If neither ``Mutect2_Multi.onco_ds_tar_gz``, nor ``Mutect2_Multi.onco_ds_local_db_dir``, is specified, the Oncotator task will download and uncompress for each execution.
+Workflow uptions:
+- ``Mutect2.run_contamination_model`` -- ``true``/``false`` whether the cross-contamination model should be run.
+- ``Mutect2.run_orientation_bias_mixture_model`` -- ``true``/``false`` whether the orientation bias model should be run.
+- ``Mutect2.run_variant_filter`` -- ``true``/``false`` whether the Mutect2 filter model should be run. This task takes as optional input the contamination model and the orientation bias model output.
+- ``Mutect2.run_realignment_filter`` -- ``true``/``false`` whether realignment filter should be run. This tasks realigns the reads at the called variant positions to hg38 and compares alignment scores.
+- ``Mutect2.run_funcotator`` -- ``true``/``false`` whether Funcotator should be run. 
+- ``Mutect2.keep_germline`` -- ``true``/``false`` whether germline variants should not be filtered. This is currently not supported. 
+- ``Mutect2.compress_output`` -- ``true``/``false`` whether the vcfs should be compressed. There is no real reason not to. 
+- ``Mutect2.make_bamout`` -- ``true``/``false`` whether Mutect2 should return a bam file to investigate support of called variants. (Useful for debugging.)
+- ``Mutect2.funcotator_use_gnomad`` -- ``true``/``false`` whether Funcotator should use gnomAD as annotation resource. 
 
-The following three parameters are useful for rendering TCGA MAFs using oncotator.  These parameters are ignored if ``is_run_oncotator`` is ``false``."
-- ``Mutect2.artifact_modes`` -- List of artifact modes to search for in the orientation bias filter.  For example to filter the OxoG artifact, you would specify ``["G/T"]``.  For both the FFPE artifact and the OxoG artifact, specify ``["G/T", "C/T"]``.  If you do not wish to search for any artifacts, please set ``Mutect2_Multi.is_run_orientation_bias_filter`` to ``false``.
-- ``Mutect2.picard_jar`` -- A direct path to a picard jar for using ``CollectSequencingArtifactMetrics``.  This parameter requirement will be eliminated in the future.
-- ``Mutect2.m2_extra_args`` -- (optional) a string of additional command line arguments of the form "-argument1 value1 -argument2 value2" for Mutect 2.  Most users will not need this.
-- ``Mutect2.m2_extra_filtering_args`` -- (optional) a string of additional command line arguments of the form "-argument1 value1 -argument2 value2" for Mutect 2.  Most users will not need this.
-- ``Mutect2.sequencing_center`` 	-- (optional) center reporting this variant.     Please see ``https://wiki.nci.nih.gov/display/TCGA/Mutation+Annotation+Format+%28MAF%29+Specification+-+v2.4`` for more details.   
-- ``Mutect2.sequence_source`` -- (optional)  ``WGS`` or ``WXS`` for whole genome or whole exome sequencing, respectively.  Please note that the controlled vocabulary of the TCGA MAF spec is *not* enforced.  Please see ``https://wiki.nci.nih.gov/display/TCGA/Mutation+Annotation+Format+%28MAF%29+Specification+-+v2.4`` for more details.
-- ``Mutect2.default_config_file`` -- "(optional)  A configuration file that can direct oncotator to use default values for unspecified annotations in the TCGA MAF.  This help prevents having MAF files with a lot of ""__UNKNOWN__"" values.  An usable example is given below.  Here is an example that should work for most users:
+Resources:
+- ``Mutect2.panel_of_normals`` -- (optional) Panel of normals VCF to use for false positive reduction by filtering common sequencing artifacts.
+- ``Mutect2.panel_of_normals_index`` -- (optional, but required if ``Mutect2.panel_of_normals`` is specified) VCF index for the panel of normals. Please see GATK4 tool ``IndexFeatureFile`` for creation of an index.
+- ``Mutect2.germline_resource`` -- (optional) gnomAD vcf containing population allele frequencies (AF) of common and rare alleles. Download an exome or genome sites vcf [here](http://gnomad.broadinstitute.org/downloads). Essential for determining possible germline variants in tumor.
+- ``Mutect2.germline_resource_index`` -- (optional, but required if ``Mutect2.germline_resource`` is specified) VCF index for gnomAD. Please see GATK4 tool ``IndexFeatureFile`` for creation of an index.
+- ``Mutect2.variants_for_contamination`` -- (optional, but required if ``Mutect2.run_contamination_model`` is ``true``) vcf containing population allele frequencies (AF) of common SNPs. If omitted, cross-sample contamination will not be calculated and contamination filtering will not be applied. This can be generated from a gnomAD vcf using the GATK4 tool ``SelectVariants`` with the argument ``--select "AF > 0.05"``.  For speed, one can get very good results using only SNPs on chromosome 1. For example, ``java -jar $gatk SelectVariants -V gnomad.vcf -L 1 --select "AF > 0.05" -O variants_for_contamination.vcf``.
+- ``Mutect2.variants_for_contamination_index`` -- (optional, but required if ``Mutect2.variants_for_contamination`` is specified) VCF index for contamination variants. Please see GATK4 tool ``IndexFeatureFile`` for creation of an index.
+- ``Mutect2.bwa_mem_index_image`` -- (optional, but required if ``Mutect2.run_realignment_filter`` is ``true``) resource for the FilterAlignmentArtifacts task. Generated by ``BwaMemIndexImageCreator``.
+- ``Mutect2.funcotator_transcript_list`` -- 
+- ``Mutect2.data_sources_tar_gz`` -- Resource for Funcotator. If not specified, the most recent one is downloaded and used. (Specifying a resource is significantly faster.)
 
-```
-[manual_annotations]
-override:NCBI_Build=37,Strand=+,status=Somatic,phase=Phase_I,sequencer=Illumina,Tumor_Validation_Allele1=,Tumor_Validation_Allele2=,Match_Norm_Validation_Allele1=,Match_Norm_Validation_Allele2=,Verification_Status=,Validation_Status=,Validation_Method=,Score=,BAM_file=,Match_Norm_Seq_Allele1=,Match_Norm_Seq_Allele2=
-```
-- ``Mutect2.filter_oncotator_maf`` -- (optional, default true) Whether Oncotator should remove filtered variants when rendering the MAF.  Ignored if `run_oncotator` is false.
+Extra arguments:
+- ``Mutect2.split_intervals_extra_args`` -- (optional) a string of additional command line arguments of the form "-argument1 value1 -argument2 value2" for the SpitIntervals task. Most users will not need this.
+- ``Mutect2.m2_extra_args`` -- (optional) a string of additional command line arguments of the form "-argument1 value1 -argument2 value2" for Mutect 2. Most users will not need this.
+- ``Mutect2.m2_filter_extra_args`` -- (optional) a string of additional command line arguments of the form "-argument1 value1 -argument2 value2" for filtering of Mutect 2 calls. Most users will not need this.
+- ``Mutect2.select_variants_extra_args`` -- (optional) a string of additional command line arguments of the form "-argument1 value1 -argument2 value2" for the selection of filtered Mutect 2 calls. Most users will not need this.
+- ``Mutect2.realignment_extra_args`` -- (optional) a string of additional command line arguments of the form "-argument1 value1 -argument2 value2" for filtering realignment artifacts.  Most users will not need this.
+- ``Mutect2.funcotate_extra_args`` -- (optional) a string of additional command line arguments of the form "-argument1 value1 -argument2 value2" for functional annotation using Funcotator. Most users will not need this.
+
+Runtime options:
+- ``Mutect2.scatter_count`` -- Number of executions to split the Mutect2 task into. The higher the number, the faster Mutect2 will return results, but at a higher cost of resources.
+- ``Mutect2.gatk_docker`` -- Docker image to use for the Mutect2 tasks. This is only used for backends configured to use docker.
+- ``Mutect2.gatk4_jar_override`` -- (optional) A GATK4 jar file to be used instead of the jar file in the docker image. This can be very useful for developers. Please note that you need to be careful that the docker image you use is compatible with the GATK4 jar file given here.
+- ``Mutect2.preemptible`` -- Number of times to attempt running a task on a preemptible VM. This is only used for cloud backends in cromwell and is ignored for local and SGE backends.
+- ``Mutect2.max_retries`` -- Number of times to retry failed tasks -- very important on the cloud when there are transient errors
+
+Each task has an exposed memory argument (in MB), which can be set if the task fails due to lack of memory. The default values are optimized to work for all tested cases while keeping computing cost at a minimum.
+
 
 ### Functional annotation (Funcotator)
 
