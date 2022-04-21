@@ -49,7 +49,7 @@ workflow Mutect2 {
         File? funcotator_data_sources_tar_gz
 
         # runtime
-        Int scatter_count = 42
+        Int scatter_count = 10
         String gatk_docker = "broadinstitute/gatk"
         File? gatk_override
         Int preemptible = 2
