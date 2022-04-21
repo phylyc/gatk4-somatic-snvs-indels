@@ -136,6 +136,8 @@ task CreatePanel {
 
     # GenomicsDB requires that the reference be a local file.
     parameter_meta{
+        input_vcfs: {localization_optional: true}
+        input_vcf_indices: {localization_optional: true}
         gnomad: {localization_optional: true}
         gnomad_idx: {localization_optional: true}
     }
