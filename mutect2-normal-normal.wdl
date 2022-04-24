@@ -63,7 +63,7 @@ workflow Mutect2NormalNormal {
         File? bwa_mem_index_image
 
         # runtime
-        Int scatter_count = 10
+        Int scatter_count = 42
         String gatk_docker = "broadinstitute/gatk"
         File? gatk_override
         Int preemptible = 2
