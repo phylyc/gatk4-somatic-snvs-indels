@@ -77,6 +77,8 @@ version development
 ##      For multisample calling, the runtimes significantly increase. With 50 shards on
 ##      25 samples the VariantCall task runs at least 4 hours, some shards up to 18 hours.
 ##      With only 10 shards, this runs for more than 48 hours, which amounts to > $100.
+##      Tumor-only cases generate ~50k variants, which, if split over only 10 shards,
+##      require the alignment artifact filter task to use more memory than the default.
 ##      TL;DR: When in doubt, use a larger scatter_count.
 ##
 ## Outputs :
@@ -151,7 +153,7 @@ workflow MultiSampleMutect2 {
         File? funcotator_data_sources_tar_gz
 
         # runtime
-        Int scatter_count = 10
+        Int scatter_count = 42
         String gatk_docker = "broadinstitute/gatk"
         File? gatk_override
         Int preemptible = 2
@@ -365,30 +367,17 @@ workflow MultiSampleMutect2 {
     }
 
     if (run_variant_filter) {
-        # Filter obvious miscalls to not waste resources on the subsequent tasks
-#        call VariantFiltration {
-#            input:
-#                input_vcf = MergeVariantCallVCFs.merged_vcf,
-#                input_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx,
-#                compress_output = compress_output,
-#                runtime_params = standard_runtime,
-#                memoryMB = filter_mutect_calls_mem,
-#        }
-#
-#        call SelectVariants as SelectGoodVariants {
-#            input:
-#                ref_fasta = ref_fasta,
-#                ref_fasta_index = ref_fasta_index,
-#                ref_dict = ref_dict,
-#                filtered_vcf = VariantFiltration.filtered_vcf,
-#                filtered_vcf_idx = VariantFiltration.filtered_vcf_idx,
-#                exclude_filtered = true,
-#                keep_germline = keep_germline,
-#                compress_output = compress_output,
-#                select_variants_extra_args = select_variants_extra_args,
-#                runtime_params = standard_runtime,
-#                memoryMB = select_variants_mem
-#        }
+        # Some variants have zero median base quality and/or zero median fragment length.
+        # Those are sequencing artifacts that were not captured by the panel of normals.
+        call SelectVariants as SelectNonGarbageVariants {
+            input:
+                filtered_vcf = MergeVariantCallVCFs.merged_vcf,
+                filtered_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx,
+                compress_output = compress_output,
+                select_variants_extra_args = "-select '(vc.getAttribute(\"MBQ\").0 > 0) && (vc.getAttribute(\"MFRL\").0 > 0)'",
+                runtime_params = standard_runtime,
+                memoryMB = select_variants_mem
+        }
 
         # From the documentation: "FilterMutectCalls goes over an unfiltered vcf in
         # three passes, two to learn any unknown parameters of the filters' models and
@@ -400,8 +389,8 @@ workflow MultiSampleMutect2 {
                 ref_fasta = ref_fasta,
                 ref_fasta_index = ref_fasta_index,
                 ref_dict = ref_dict,
-                input_vcf = MergeVariantCallVCFs.merged_vcf,
-                input_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx,
+                input_vcf = SelectNonGarbageVariants.selected_vcf,
+                input_vcf_idx = SelectNonGarbageVariants.selected_vcf_idx,
                 orientation_bias = LearnReadOrientationModel.orientation_bias,
                 contamination_tables = CalculateContamination.contamination_table,
                 tumor_segmentation = CalculateContamination.tumor_segmentation,
@@ -414,9 +403,6 @@ workflow MultiSampleMutect2 {
 
         call SelectVariants as SelectPassingVariants {
             input:
-                ref_fasta = ref_fasta,
-                ref_fasta_index = ref_fasta_index,
-                ref_dict = ref_dict,
                 filtered_vcf = FilterMutectCalls.filtered_vcf,
                 filtered_vcf_idx = FilterMutectCalls.filtered_vcf_idx,
                 exclude_filtered = true,
@@ -433,13 +419,12 @@ workflow MultiSampleMutect2 {
             scatter (scattered_intervals in SplitIntervals.interval_files) {
                 call SelectVariants as SelectPreRealignmentVariants {
                     input:
+                        interval_list = scattered_intervals,
                         ref_fasta = ref_fasta,
                         ref_fasta_index = ref_fasta_index,
                         ref_dict = ref_dict,
-                        interval_list = scattered_intervals,
                         filtered_vcf = SelectPassingVariants.selected_vcf,
                         filtered_vcf_idx = SelectPassingVariants.selected_vcf_idx,
-                        exclude_filtered = false,  # is already filtered
                         keep_germline = keep_germline,
                         compress_output = compress_output,
                         runtime_params = standard_runtime,
@@ -476,9 +461,6 @@ workflow MultiSampleMutect2 {
 
             call SelectVariants as SelectPostRealignmentVariants {
                 input:
-                    ref_fasta = ref_fasta,
-                    ref_fasta_index = ref_fasta_index,
-                    ref_dict = ref_dict,
                     filtered_vcf = MergeRealignmentFilteredVCFs.merged_vcf,
                     filtered_vcf_idx = MergeRealignmentFilteredVCFs.merged_vcf_idx,
                     exclude_filtered = true,
@@ -546,9 +528,6 @@ workflow MultiSampleMutect2 {
 
             call SelectVariants as SelectSampleVariants {
                 input:
-                    ref_fasta = ref_fasta,
-                    ref_fasta_index = ref_fasta_index,
-                    ref_dict = ref_dict,
                     filtered_vcf = selected_vcf,
                     filtered_vcf_idx = selected_vcf_idx,
                     exclude_filtered = false,  # is already filtered
@@ -1087,7 +1066,7 @@ task FilterMutectCalls {
         Array[File]? tumor_segmentation
         File? mutect_stats
 
-        Int max_median_fragment_length_difference = 5000  # default: 10000
+        Int max_median_fragment_length_difference = 10000  # default: 10000
         Int min_alt_median_base_quality = 20  # default: 20
         Int min_alt_median_mapping_quality = 20  # default: -1
 
@@ -1155,67 +1134,6 @@ task FilterMutectCalls {
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         disks: "local-disk " + disk_spaceGB + " HDD"
-        preemptible: runtime_params.preemptible
-        maxRetries: runtime_params.max_retries
-        cpu: runtime_params.cpu
-    }
-}
-
-task VariantFiltration {
-    # Filter variants based on INFO and/or FORMAT annotations
-
-    input {
-        File input_vcf
-        File input_vcf_idx
-
-        Int min_read_depth = 1
-        Int min_base_quality = 1
-        Int min_fragment_length = 1
-        Int min_mapping_quality = 1
-
-        Boolean compress_output = false
-        String? variant_filtration_extra_args
-
-        Runtime runtime_params
-        Int? memoryMB = 2048
-    }
-
-    # Optional localization leads to cromwell error.
-    parameter_meta{
-        input_vcf: {localization_optional: true}
-        input_vcf_idx: {localization_optional: true}
-    }
-
-    Int disk_spaceGB = ceil(size(input_vcf, "GB")) + runtime_params.disk
-
-    String output_base_name = basename(basename(input_vcf, ".gz"), ".vcf") + ".hard_filtered"
-    String output_vcf = output_base_name + if compress_output then ".vcf.gz" else ".vcf"
-    String output_vcf_idx = output_vcf + if compress_output then ".tbi" else ".idx"
-
-	command <<<
-        set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
-        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
-            VariantFiltration \
-            --variant ~{input_vcf} \
-            --output ~{output_vcf} \
-            --filter-name "DP~{min_read_depth}" \
-            --filter-expression "DP > ~{min_read_depth - 1}" \
-            --filter-name "MQ~{min_base_quality}" \
-            --filter-expression "MQ > ~{min_base_quality - 1}" \
-            ~{variant_filtration_extra_args}
-  	>>>
-
-  	output {
-  		File filtered_vcf = output_vcf
-  		File filtered_vcf_idx = output_vcf_idx
-  	}
-
-    runtime {
-        docker: runtime_params.gatk_docker
-        bootDiskSizeGb: runtime_params.boot_disk_size
-        memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        disks: "local-disk " + select_first([disk_spaceGB, runtime_params.disk]) + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
         cpu: runtime_params.cpu
@@ -1310,12 +1228,12 @@ task SelectVariants {
 
     input {
         File? interval_list
-        File ref_fasta
-        File ref_fasta_index
-        File ref_dict
+        File? ref_fasta
+        File? ref_fasta_index
+        File? ref_dict
         File filtered_vcf
         File filtered_vcf_idx
-        Boolean exclude_filtered = true
+        Boolean exclude_filtered = false
         Boolean keep_germline = false
         Boolean compress_output = false
         String? tumor_sample_name
@@ -1343,10 +1261,12 @@ task SelectVariants {
 
     String dollar = "$"
     # Remove variants from multi-sample calling that are not present in the selected
-    # tumor sample. We demand the allelic depth of the alt allele to be greater than 0.
+    # tumor sample. We demand that the total read depth is greater than the allelic
+    # depth of the reference allele. This ensures that there is at least one alternate
+    # allele present.
     String select_true_variants_arg = (
         if defined(tumor_sample_name)
-        then "-select 'vc.getGenotype(\"" + tumor_sample_name + "\").getAD().1 > 0'"
+        then "-select 'vc.getGenotype(\"" + tumor_sample_name + "\").getAD().0 < vc.getGenotype(\"" + tumor_sample_name + "\").getDP()'"
         else ""
     )
 
@@ -1355,7 +1275,7 @@ task SelectVariants {
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             SelectVariants \
-            -R ~{ref_fasta} \
+            ~{"-R " + ref_fasta} \
             ~{"-L " + interval_list} \
             -V ~{filtered_vcf} \
             --output ~{uncompressed_output_vcf} \
