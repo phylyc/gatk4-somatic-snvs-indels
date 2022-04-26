@@ -148,8 +148,8 @@ workflow MultiSampleMutect2 {
         File? panel_of_normals_idx
         File? germline_resource
         File? germline_resource_tbi
-		File? variants_for_contamination
-		File? variants_for_contamination_idx
+        File? variants_for_contamination
+        File? variants_for_contamination_idx
         File? bwa_mem_index_image
         File? funcotator_transcript_list
         File? funcotator_data_sources_tar_gz
@@ -218,9 +218,9 @@ workflow MultiSampleMutect2 {
     call SplitIntervals {
     	input:
             interval_list = interval_list,
-    		ref_fasta = ref_fasta,
-    		ref_fasta_index = ref_fasta_index,
-    		ref_dict = ref_dict,
+            ref_fasta = ref_fasta,
+            ref_fasta_index = ref_fasta_index,
+            ref_dict = ref_dict,
             scatter_count = scatter_count,
             split_intervals_extra_args = split_intervals_extra_args,
             runtime_params = standard_runtime,
@@ -240,7 +240,7 @@ workflow MultiSampleMutect2 {
 
     scatter (scattered_intervals in SplitIntervals.interval_files) {
     	call VariantCall {
-			input:
+            input:
                 interval_list = scattered_intervals,
                 ref_fasta = ref_fasta,
                 ref_fasta_index = ref_fasta_index,
@@ -952,12 +952,12 @@ task GetPileupSummaries {
     # outputs. If the tool errors, no table is created and the glob yields an empty array.
 
 	input {
-		File interval_list
-		File input_bam
-		File input_bai
-		File? variants_for_contamination
-		File? variants_for_contamination_idx
-		String? getpileupsummaries_extra_args
+        File interval_list
+        File input_bam
+        File input_bai
+        File? variants_for_contamination
+        File? variants_for_contamination_idx
+        String? getpileupsummaries_extra_args
 
         Runtime runtime_params
         Int? memoryMB = 2048
@@ -972,7 +972,7 @@ task GetPileupSummaries {
         variants_for_contamination_idx: {localization_optional: true}
     }
 
-	String sample_id = basename(input_bam, ".bam")
+    String sample_id = basename(input_bam, ".bam")
     String output_name = sample_id + ".pileup"
 
     command <<<
@@ -998,11 +998,11 @@ task GetPileupSummaries {
         exit 0
     >>>
 
-	output {
+    output {
         Array[File] pileup_summaries = glob(output_name)
-	}
+    }
 
-  	runtime {
+    runtime {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
@@ -1010,7 +1010,7 @@ task GetPileupSummaries {
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
         cpu: runtime_params.cpu
-	}
+    }
 }
 
 task GatherPileupSummaries {
@@ -1063,13 +1063,13 @@ task CalculateContamination {
     # of observed vs expected, the tool estimates contamination. It gains further
     # accuracy if a matched normal is specified.
 
-	input {
+    input {
         File tumor_pileups
         File? normal_pileups
 
-		Runtime runtime_params
+        Runtime runtime_params
         Int? memoryMB = 512
-	}
+    }
 
     # Optional localization leads to cromwell error.
     # parameter_meta {
@@ -1082,7 +1082,7 @@ task CalculateContamination {
     String output_contamination = tumor_sample_id + normal_sample_id + ".contamination"
     String output_segments = tumor_sample_id + normal_sample_id + ".segments"
 
-	command <<<
+    command <<<
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
@@ -1091,14 +1091,14 @@ task CalculateContamination {
             ~{"--matched-normal " + normal_pileups} \
             --output ~{output_contamination} \
             --tumor-segmentation ~{output_segments}
-	>>>
+    >>>
 
-	output {
-		File contamination_table = output_contamination
+    output {
+        File contamination_table = output_contamination
         File tumor_segmentation = output_segments
-	}
+    }
 
-	runtime {
+    runtime {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
@@ -1106,7 +1106,7 @@ task CalculateContamination {
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
         cpu: runtime_params.cpu
-	}
+    }
 }
 
 task FilterMutectCalls {
@@ -1161,7 +1161,7 @@ task FilterMutectCalls {
     String output_vcf = output_base_name + if compress_output then ".vcf.gz" else ".vcf"
     String output_vcf_idx = output_vcf + if compress_output then ".tbi" else ".idx"
 
-	command <<<
+    command <<<
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
@@ -1179,13 +1179,13 @@ task FilterMutectCalls {
             --filtering-stats ~{output_base_name}.stats \
             --seconds-between-progress-updates 300 \
             ~{m2_filter_extra_args}
-  	>>>
+    >>>
 
-  	output {
-  		File filtered_vcf = output_vcf
-  		File filtered_vcf_idx = output_vcf_idx
+    output {
+        File filtered_vcf = output_vcf
+        File filtered_vcf_idx = output_vcf_idx
         File filtering_stats = output_base_name + ".stats"
-  	}
+    }
 
     runtime {
         docker: runtime_params.gatk_docker
@@ -1264,10 +1264,10 @@ task FilterAlignmentArtifacts {
             ~{realignment_extra_args}
     >>>
 
-  	output {
-  		File filtered_vcf = output_vcf
-  		File filtered_vcf_idx = output_vcf_idx
-  	}
+    output {
+        File filtered_vcf = output_vcf
+        File filtered_vcf_idx = output_vcf_idx
+    }
 
     runtime {
         docker: select_first([gatk_docker, runtime_params.gatk_docker])
@@ -1328,7 +1328,7 @@ task SelectVariants {
         else ""
     )
 
-	command <<<
+    command <<<
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
@@ -1370,12 +1370,12 @@ task SelectVariants {
                 --input ~{output_vcf} \
                 --output ~{output_vcf_idx}
         fi
-	>>>
+    >>>
 
-	output {
-  		File selected_vcf = output_vcf
-  		File selected_vcf_idx = output_vcf_idx
-	}
+    output {
+        File selected_vcf = output_vcf
+        File selected_vcf_idx = output_vcf_idx
+    }
 
     runtime {
         docker: runtime_params.gatk_docker
@@ -1392,14 +1392,14 @@ task MergeVCFs {
     # Consider replacing MergeVcfs with GatherVcfsCloud once the latter is out of beta.
 
 	input {
-		Array[File] input_vcfs
-		Array[File] input_vcf_indices
-		String output_name
-		Boolean compress_output = false
+        Array[File] input_vcfs
+        Array[File] input_vcf_indices
+        String output_name
+        Boolean compress_output = false
 
-		Runtime runtime_params
+        Runtime runtime_params
         Int? memoryMB = 512
-	}
+    }
 
     # Optional localization leads to cromwell error.
     # parameter_meta {
