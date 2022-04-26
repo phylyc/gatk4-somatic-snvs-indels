@@ -127,6 +127,7 @@ workflow MultiSampleMutect2 {
         Boolean run_orientation_bias_mixture_model = true
         Boolean run_variant_filter = true
         Boolean run_realignment_filter = true
+        Boolean run_realignment_filter_only_on_high_confidence_variants = false
         Boolean run_funcotator = true
         Boolean keep_germline = false  # not currently supported
         Boolean compress_output = true
@@ -138,6 +139,7 @@ workflow MultiSampleMutect2 {
         String? m2_extra_args
         String? m2_filter_extra_args
         String? select_variants_extra_args
+        String? select_low_conficence_variants_arg = "-select '(vc.getAttribute(\"DP\") < 4) || (vc.getAttribute(\"MBQ\").0 == 0) || (vc.getAttribute(\"MFRL\").0 == 0)'"
         String? realignment_extra_args
         String? funcotate_extra_args
 
@@ -367,18 +369,6 @@ workflow MultiSampleMutect2 {
     }
 
     if (run_variant_filter) {
-        # Some variants have zero median base quality and/or zero median fragment length.
-        # Those are sequencing artifacts that were not captured by the panel of normals.
-        call SelectVariants as SelectNonGarbageVariants {
-            input:
-                filtered_vcf = MergeVariantCallVCFs.merged_vcf,
-                filtered_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx,
-                compress_output = compress_output,
-                select_variants_extra_args = "-select '(vc.getAttribute(\"MBQ\").0 > 0) && (vc.getAttribute(\"MFRL\").0 > 0)'",
-                runtime_params = standard_runtime,
-                memoryMB = select_variants_mem
-        }
-
         # From the documentation: "FilterMutectCalls goes over an unfiltered vcf in
         # three passes, two to learn any unknown parameters of the filters' models and
         # to set the threshold P(error), and one to apply the learned filters. [...]
@@ -389,8 +379,8 @@ workflow MultiSampleMutect2 {
                 ref_fasta = ref_fasta,
                 ref_fasta_index = ref_fasta_index,
                 ref_dict = ref_dict,
-                input_vcf = SelectNonGarbageVariants.selected_vcf,
-                input_vcf_idx = SelectNonGarbageVariants.selected_vcf_idx,
+                input_vcf = MergeVariantCallVCFs.merged_vcf,
+                input_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx,
                 orientation_bias = LearnReadOrientationModel.orientation_bias,
                 contamination_tables = CalculateContamination.contamination_table,
                 tumor_segmentation = CalculateContamination.tumor_segmentation,
@@ -414,8 +404,48 @@ workflow MultiSampleMutect2 {
         }
 
         if (run_realignment_filter) {
-            # Realigning reads for variants can be expensive / slow if many variants
-            # have been called. Thus, we scatter the realignment task over intervals.
+            # Realigning reads for variants can be expensive if many variants have been
+            # called. Especially for tumor-only calling, plenty of variant calls are
+            # still sequencing artifacts of sometimes obviously low quality that have
+            # been missed by FilterMutectCalls. In order to make the filter affordable,
+            # we divide the called variants into low and high confidence groups based
+            # on read depth and VAF. Variants that come from reads that only support the
+            # alternate allele are suspect. For those variants, the MBQ and MFRL are set
+            # to zero.
+            if (run_realignment_filter_only_on_high_confidence_variants) {
+                call SelectVariants as SelectLowConfidenceVariants {
+                    input:
+                        filtered_vcf = SelectPassingVariants.selected_vcf,
+                        filtered_vcf_idx = SelectPassingVariants.selected_vcf_idx,
+                        compress_output = compress_output,
+                        select_variants_extra_args = select_low_conficence_variants_arg,
+                        runtime_params = standard_runtime,
+                        memoryMB = select_variants_mem
+                }
+
+                call SelectVariants as SelectHighConfidenceVariants {
+                    input:
+                        filtered_vcf = SelectPassingVariants.selected_vcf,
+                        filtered_vcf_idx = SelectPassingVariants.selected_vcf_idx,
+                        compress_output = compress_output,
+                        select_variants_extra_args = select_low_conficence_variants_arg + " -invertSelect true",
+                        runtime_params = standard_runtime,
+                        memoryMB = select_variants_mem
+                }
+            }
+
+            File variants_to_realign = select_first([
+                if run_realignment_filter_only_on_high_confidence_variants
+                then SelectHighConfidenceVariants.selected_vcf
+                else SelectPassingVariants.selected_vcf
+            ])
+            File variants_to_realign_idx = select_first([
+                if run_realignment_filter_only_on_high_confidence_variants
+                then SelectHighConfidenceVariants.selected_vcf_idx
+                else SelectPassingVariants.selected_vcf_idx
+            ])
+
+            # Due to its long runtime, we scatter the realignment task over intervals.
             scatter (scattered_intervals in SplitIntervals.interval_files) {
                 call SelectVariants as SelectPreRealignmentVariants {
                     input:
@@ -423,9 +453,8 @@ workflow MultiSampleMutect2 {
                         ref_fasta = ref_fasta,
                         ref_fasta_index = ref_fasta_index,
                         ref_dict = ref_dict,
-                        filtered_vcf = SelectPassingVariants.selected_vcf,
-                        filtered_vcf_idx = SelectPassingVariants.selected_vcf_idx,
-                        keep_germline = keep_germline,
+                        filtered_vcf = variants_to_realign,
+                        filtered_vcf_idx = variants_to_realign_idx,
                         compress_output = compress_output,
                         runtime_params = standard_runtime,
                         memoryMB = select_variants_mem
@@ -470,18 +499,47 @@ workflow MultiSampleMutect2 {
                     runtime_params = standard_runtime,
                     memoryMB = select_variants_mem
             }
+
+            if (run_realignment_filter_only_on_high_confidence_variants) {
+                call MergeVCFs as MergeLowConfidenceAndRealignmentFilteredVCFs {
+                    input:
+                        input_vcfs = select_all([
+                            SelectLowConfidenceVariants.selected_vcf,
+                            SelectPostRealignmentVariants.selected_vcf
+                        ]),
+                        input_vcf_indices = select_all([
+                            SelectLowConfidenceVariants.selected_vcf_idx,
+                            SelectPostRealignmentVariants.selected_vcf_idx
+                        ]),
+                        output_name = individual_id + ".filtered.selected.realignmentfiltered.selected.merged",
+                        compress_output = compress_output,
+                        runtime_params = standard_runtime,
+                        memoryMB = merge_vcfs_mem
+                }
+            }
+
+            File realignment_filtered_variants = select_first([
+                if run_realignment_filter_only_on_high_confidence_variants
+                then MergeLowConfidenceAndRealignmentFilteredVCFs.merged_vcf
+                else SelectPostRealignmentVariants.selected_vcf
+            ])
+            File realignment_filtered_variants_idx = select_first([
+                if run_realignment_filter_only_on_high_confidence_variants
+                then MergeLowConfidenceAndRealignmentFilteredVCFs.merged_vcf_idx
+                else SelectPostRealignmentVariants.selected_vcf_idx
+            ])
         }
     }
 
     File selected_vcf = select_first([
         if run_variant_filter then (
-            if run_realignment_filter then SelectPostRealignmentVariants.selected_vcf
+            if run_realignment_filter then realignment_filtered_variants
             else SelectPassingVariants.selected_vcf
         ) else MergeVariantCallVCFs.merged_vcf
     ])
     File selected_vcf_idx = select_first([
         if run_variant_filter then (
-            if run_realignment_filter then SelectPostRealignmentVariants.selected_vcf_idx
+            if run_realignment_filter then realignment_filtered_variants_idx
             else SelectPassingVariants.selected_vcf_idx
         ) else MergeVariantCallVCFs.merged_vcf_idx
     ])
@@ -694,8 +752,8 @@ task VariantCall {
         File? germline_resource_tbi
 
         Boolean genotype_germline_sites = false
-        Boolean use_linked_de_bruijn_graph = false
         Boolean native_pair_hmm_use_double_precision = false
+        Boolean use_linked_de_bruijn_graph = true
 
         String? m2_extra_args
 
