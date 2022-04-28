@@ -23,6 +23,7 @@ workflow Mutect2 {
         Boolean run_orientation_bias_mixture_model = true
         Boolean run_variant_filter = true
         Boolean run_realignment_filter = true
+        Boolean run_realignment_filter_only_on_high_confidence_variants = false
         Boolean run_funcotator = true
         Boolean keep_germline = false  # not currently supported
         Boolean compress_output = true
@@ -34,6 +35,7 @@ workflow Mutect2 {
         String? m2_extra_args
         String? m2_filter_extra_args
         String? select_variants_extra_args
+        String? select_low_conficence_variants_jexl_arg = "'(vc.getAttribute(\"GERMQ\") < 30) || (vc.getAttribute(\"DP\") < 4) || (vc.getAttribute(\"MBQ\").0 == 0) || (vc.getAttribute(\"MFRL\").0 == 0)'"
         String? realignment_extra_args
         String? funcotate_extra_args
 
@@ -113,6 +115,7 @@ workflow Mutect2 {
             run_orientation_bias_mixture_model = run_orientation_bias_mixture_model,
             run_variant_filter = run_variant_filter,
             run_realignment_filter = run_realignment_filter,
+            run_realignment_filter_only_on_high_confidence_variants = run_realignment_filter_only_on_high_confidence_variants,
             run_funcotator = run_funcotator,
             keep_germline = keep_germline,
             compress_output = compress_output,
@@ -123,6 +126,7 @@ workflow Mutect2 {
             m2_extra_args = m2_extra_args,
             m2_filter_extra_args = m2_filter_extra_args,
             select_variants_extra_args = select_variants_extra_args,
+            select_low_conficence_variants_jexl_arg = select_low_conficence_variants_jexl_arg,
             realignment_extra_args = realignment_extra_args,
             funcotate_extra_args = funcotate_extra_args,
 

@@ -22,6 +22,9 @@ version development
 ## run_orientation_bias_mixture_model_filter:
 ## run_variant_filter:
 ## run_realignment_filter:
+## run_realignment_filter_only_on_high_confidence_variants:
+## select_low_conficence_variants_jexl_arg: JEXL filtering expression to select low
+##      confidence somatic variants. See the default value for formatting details.
 ## run_funcotator:
 ## keep_germline: retains germline variants; currently not supported. They are being
 ##      filtered by the SelectVariants task.
@@ -68,17 +71,12 @@ version development
 ##      for a preemptible to fail prematurely, thus increasing cost. On the other hand,
 ##      each shard has an overhead of ~5 minutes for spinup and spindown, which is the
 ##      main source of compute cost for large scatter counts. The main difference
-##      between WES and WGS is in the filtering alignment artifacts task:
-##                                  scatter: 10     scatter: 50
-##        VariantCall                   2-5h            30m
-##        FilterAlignmentArtifacts
-##              WES                     25m             15m
-##              WGS                     7h
+##      between WES and WGS is in the filtering alignment artifacts task.
 ##      For multisample calling, the runtimes significantly increase. With 50 shards on
 ##      25 samples the VariantCall task runs at least 4 hours, some shards up to 18 hours.
-##      With only 10 shards, this runs for more than 48 hours, which amounts to > $100.
-##      Tumor-only cases generate ~50k variants, which, if split over only 10 shards,
-##      require the alignment artifact filter task to use more memory than the default.
+##      Tumor-only cases generate ~50k variants, which, if split over only less than
+##      the default number of shards (42), require the alignment artifact filter task to
+##      use more memory than the default.
 ##      TL;DR: When in doubt, use a larger scatter_count.
 ##
 ## Outputs :
@@ -139,7 +137,7 @@ workflow MultiSampleMutect2 {
         String? m2_extra_args
         String? m2_filter_extra_args
         String? select_variants_extra_args
-        String? select_low_conficence_variants_arg = "-select '(vc.getAttribute(\"DP\") < 4) || (vc.getAttribute(\"MBQ\").0 == 0) || (vc.getAttribute(\"MFRL\").0 == 0)'"
+        String? select_low_conficence_variants_jexl_arg = "'(vc.getAttribute(\"GERMQ\") < 30) || (vc.getAttribute(\"DP\") < 4) || (vc.getAttribute(\"MBQ\").0 == 0) || (vc.getAttribute(\"MFRL\").0 == 0)'"
         String? realignment_extra_args
         String? funcotate_extra_args
 
@@ -418,7 +416,7 @@ workflow MultiSampleMutect2 {
                         filtered_vcf = SelectPassingVariants.selected_vcf,
                         filtered_vcf_idx = SelectPassingVariants.selected_vcf_idx,
                         compress_output = compress_output,
-                        select_variants_extra_args = select_low_conficence_variants_arg,
+                        select_variants_extra_args = "-select " + select_low_conficence_variants_jexl_arg,
                         runtime_params = standard_runtime,
                         memoryMB = select_variants_mem
                 }
@@ -428,7 +426,7 @@ workflow MultiSampleMutect2 {
                         filtered_vcf = SelectPassingVariants.selected_vcf,
                         filtered_vcf_idx = SelectPassingVariants.selected_vcf_idx,
                         compress_output = compress_output,
-                        select_variants_extra_args = select_low_conficence_variants_arg + " -invertSelect true",
+                        select_variants_extra_args = "-select " + select_low_conficence_variants_jexl_arg + " -invertSelect true",
                         runtime_params = standard_runtime,
                         memoryMB = select_variants_mem
                 }
@@ -473,7 +471,7 @@ workflow MultiSampleMutect2 {
                         compress_output = compress_output,
                         realignment_extra_args = realignment_extra_args,
                         runtime_params = standard_runtime,
-                        memoryMB = filter_alignment_artifacts_mem,
+                        memoryMB = filter_alignment_artifacts_mem + num_bams * additional_per_sample_mem,
                         cpu = filter_alignment_artifacts_cpu
                 }
             }
