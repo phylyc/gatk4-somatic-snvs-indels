@@ -132,8 +132,8 @@ workflow MultiSampleMutect2 {
         Boolean make_bamout = false
         Boolean funcotator_use_gnomad = true
 
-        Boolean genotype_germline_sites = true
-        Boolean genotype_pon_sites = true
+        Boolean genotype_germline_sites = false
+        Boolean genotype_pon_sites = false
         Boolean native_pair_hmm_use_double_precision = true
         Boolean use_linked_de_bruijn_graph = true
         Boolean recover_all_dangling_branches = true
