@@ -156,7 +156,7 @@ workflow MultiSampleMutect2 {
         Int scatter_count = 42
         String gatk_docker = "broadinstitute/gatk"
         File? gatk_override
-        Int preemptible = 2
+        Int preemptible = 1
         Int max_retries = 2
         Int emergency_extra_diskGB = 0
 
@@ -255,7 +255,6 @@ workflow MultiSampleMutect2 {
                 germline_resource_tbi = germline_resource_tbi,
                 make_bamout = make_bamout,
                 run_ob_filter = run_orientation_bias_mixture_model,
-                genotype_germline_sites = keep_germline,
                 compress_output = compress_output,
                 m2_extra_args = m2_extra_args,
                 gatk_docker = gatk_docker,
@@ -604,7 +603,8 @@ workflow MultiSampleMutect2 {
                     interval_list = interval_list,
                     input_vcf = SelectSampleVariants.selected_vcf,
                     input_vcf_idx = SelectSampleVariants.selected_vcf_idx,
-                    output_base_name = GetTumorSampleName.sample_name + ".annotated",
+                    output_base_name = GetTumorSampleName.sample_name,
+                    individual_id = individual_id,
                     tumor_sample_name = GetTumorSampleName.sample_name,
                     normal_sample_name = if normal_sample_name != "Unknown" then normal_sample_name else None,
                     transcript_list = funcotator_transcript_list,
@@ -750,8 +750,9 @@ task VariantCall {
         File? germline_resource_tbi
 
         Boolean genotype_germline_sites = false
+        Boolean genotype_pon_sites = false
         Boolean native_pair_hmm_use_double_precision = false
-        Boolean use_linked_de_bruijn_graph = true
+        Boolean use_linked_de_bruijn_graph = false
 
         String? m2_extra_args
 
@@ -816,6 +817,7 @@ task VariantCall {
             ~{run_ob_filter_arg} \
             ~{"--germline-resource " + germline_resource} \
             ~{true="--genotype-germline-sites true" false="" genotype_germline_sites} \
+            ~{true="--genotype-pon-sites true" false="" genotype_pon_sites} \
             ~{true="--linked-de-bruijn-graph true" false="" use_linked_de_bruijn_graph} \
             --smith-waterman FASTEST_AVAILABLE \
             --pair-hmm-implementation FASTEST_AVAILABLE \
@@ -909,6 +911,8 @@ task LearnReadOrientationModel {
     #     f1r2_counts: {localization_optional: true}
     # }
 
+    Int f1r2_counts_size = ceil(size(f1r2_counts, "GB"))
+    Int disk_size = runtime_params.disk + f1r2_counts_size
     String output_name = individual_id + "_artifact_priors.tar.gz"
     Boolean f1r2_counts_empty = (length(f1r2_counts) == 0)
 
@@ -935,7 +939,7 @@ task LearnReadOrientationModel {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        disks: "local-disk " + runtime_params.disk + " HDD"
+        disks: "local-disk " + disk_size + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
         cpu: runtime_params.cpu
@@ -1505,6 +1509,7 @@ task Funcotate {
 
         File input_vcf
         File input_vcf_idx
+        String? individual_id
         String? tumor_sample_name
         String? normal_sample_name
 
@@ -1609,6 +1614,7 @@ task Funcotate {
             ~{"-L " + interval_list} \
             ~{"--transcript-selection-mode " + transcript_selection_mode} \
             ~{"--transcript-list " + transcript_list} \
+            --annotation-default individual_id:~{default="Unknown" individual_id} \
             --annotation-default tumor_barcode:~{default="Unknown" tumor_sample_name} \
             --annotation-default normal_barcode:~{default="Unknown" normal_sample_name} \
             ~{true="--annotation-default " false="" defined(annotation_defaults)}~{default="" sep=" --annotation-default " annotation_defaults} \
