@@ -132,6 +132,12 @@ workflow MultiSampleMutect2 {
         Boolean make_bamout = false
         Boolean funcotator_use_gnomad = true
 
+        Boolean genotype_germline_sites = true
+        Boolean genotype_pon_sites = true
+        Boolean native_pair_hmm_use_double_precision = true
+        Boolean use_linked_de_bruijn_graph = true
+        Boolean recover_all_dangling_branches = true
+
         # expose extra arguments for import of this workflow
         String? split_intervals_extra_args
         String? m2_extra_args
@@ -213,6 +219,9 @@ workflow MultiSampleMutect2 {
         "boot_disk_size": 12  # needs to be > 10
     }
 
+    # TODO: Determine covered region of the genome first (with depth threshold)
+    #       and use this as interval list for variant calling.
+
     call SplitIntervals {
     	input:
             interval_list = interval_list,
@@ -256,6 +265,11 @@ workflow MultiSampleMutect2 {
                 make_bamout = make_bamout,
                 run_ob_filter = run_orientation_bias_mixture_model,
                 compress_output = compress_output,
+                genotype_germline_sites = genotype_germline_sites,
+                genotype_pon_sites = genotype_pon_sites,
+                native_pair_hmm_use_double_precision = native_pair_hmm_use_double_precision,
+                use_linked_de_bruijn_graph = use_linked_de_bruijn_graph,
+                recover_all_dangling_branches = recover_all_dangling_branches,
                 m2_extra_args = m2_extra_args,
                 gatk_docker = gatk_docker,
                 gatk_override = gatk_override,
@@ -753,6 +767,7 @@ task VariantCall {
         Boolean genotype_pon_sites = false
         Boolean native_pair_hmm_use_double_precision = false
         Boolean use_linked_de_bruijn_graph = false
+        Boolean recover_all_dangling_branches = false
 
         String? m2_extra_args
 
@@ -819,6 +834,7 @@ task VariantCall {
             ~{true="--genotype-germline-sites true" false="" genotype_germline_sites} \
             ~{true="--genotype-pon-sites true" false="" genotype_pon_sites} \
             ~{true="--linked-de-bruijn-graph true" false="" use_linked_de_bruijn_graph} \
+            ~{true="--recover-all-dangling-branches true" false="" recover_all_dangling_branches} \
             --smith-waterman FASTEST_AVAILABLE \
             --pair-hmm-implementation FASTEST_AVAILABLE \
             ~{"--native-pair-hmm-threads " + native_hmm_pair_threads} \

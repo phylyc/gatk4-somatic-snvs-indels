@@ -30,6 +30,12 @@ workflow Mutect2 {
         Boolean make_bamout = false
         Boolean funcotator_use_gnomad = true
 
+        Boolean genotype_germline_sites = true
+        Boolean genotype_pon_sites = true
+        Boolean native_pair_hmm_use_double_precision = true
+        Boolean use_linked_de_bruijn_graph = true
+        Boolean recover_all_dangling_branches = true
+
         # expose extra arguments for import of this workflow
         String? split_intervals_extra_args
         String? m2_extra_args
@@ -54,7 +60,7 @@ workflow Mutect2 {
         Int scatter_count = 42
         String gatk_docker = "broadinstitute/gatk"
         File? gatk_override
-        Int preemptible = 2
+        Int preemptible = 1
         Int max_retries = 2
         Int emergency_extra_diskGB = 0
 
@@ -121,6 +127,12 @@ workflow Mutect2 {
             compress_output = compress_output,
             make_bamout = make_bamout,
             funcotator_use_gnomad = funcotator_use_gnomad,
+
+            genotype_germline_sites = genotype_germline_sites,
+            genotype_pon_sites = genotype_pon_sites,
+            native_pair_hmm_use_double_precision = native_pair_hmm_use_double_precision,
+            use_linked_de_bruijn_graph = use_linked_de_bruijn_graph,
+            recover_all_dangling_branches = recover_all_dangling_branches,
 
             split_intervals_extra_args = split_intervals_extra_args,
             m2_extra_args = m2_extra_args,
