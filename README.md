@@ -100,16 +100,21 @@ Primary inputs:
 - ``Mutect2.normal_bam`` -- (optional) File path or storage location (depending on backend) of the normal bam file.
 - ``Mutect2.normal_bam_index`` -- (optional, but required if ``Mutect2.normal_bam`` is specified) File path or storage location (depending on backend) of the normal bam file index.
 
-Workflow uptions:
+Workflow options:
 - ``Mutect2.run_contamination_model`` -- ``true``/``false`` whether the cross-contamination model should be run.
 - ``Mutect2.run_orientation_bias_mixture_model`` -- ``true``/``false`` whether the orientation bias model should be run.
 - ``Mutect2.run_variant_filter`` -- ``true``/``false`` whether the Mutect2 filter model should be run. This task takes as optional input the contamination model and the orientation bias model output.
 - ``Mutect2.run_realignment_filter`` -- ``true``/``false`` whether realignment filter should be run. This tasks realigns the reads at the called variant positions to hg38 and compares alignment scores.
 - ``Mutect2.run_realignment_filter_only_on_high_confidence_variants`` -- ``true``/``false`` whether realignment filter should be run only on variants for which we can say with high confidence that they are somatic. The selection is determined by the ``Mutect2.select_low_conficence_variants_jexl_arg`` argument below.
+- ``Mutect2.run_cnn_scoring_model`` -- ``true``/``false`` whether CNNScoreVariants should be run. This removes paired normal sample annotations from the funcotated MAF as the CNN model was trained to run on single sample VCFs. Running the CNN model currently likely leads to a failure of the workflow. 
 - ``Mutect2.run_funcotator`` -- ``true``/``false`` whether Funcotator should be run. 
-- ``Mutect2.keep_germline`` -- ``true``/``false`` whether germline variants should not be filtered. This is currently not supported. 
 - ``Mutect2.compress_output`` -- ``true``/``false`` whether the vcfs should be compressed. There is no real reason not to. 
 - ``Mutect2.make_bamout`` -- ``true``/``false`` whether Mutect2 should return a bam file to investigate support of called variants. (Useful for debugging.)
+- ``Mutect2.keep_germline`` -- ``true``/``false`` whether germline variants should not be filtered. This is currently not supported. 
+- ``Mutect2.genotype_germline_variants`` -- ``true``/``false`` whether germline variants should appear in the Mutect2 output. [Issue](https://github.com/broadinstitute/gatk/issues/7391)
+- ``Mutect2.genotype_pon_sites`` -- ``true``/``false`` whether panel of normal sites should appear in the Mutect2 output. They carry a PON flag and will be filtered. 
+- ``Mutect2.use_linked_de_bruijn_graph`` -- ``true``/``false`` whether to use a linked de Bruijn graph for the local assembly. This should lead to better haplotypes (gain of specificity), but is prone to obvious false negatives (loss of sensitivity) if used without recovery of all dangling branches.
+- ``Mutect2.recover_all_dangling_branches`` -- ``true``/``false`` whether to recover dangling branches that fork after splitting from the reference. This is recommended to use with a linked de Bruijn graph as otherwise some highly covered known hotspot mutations (and others) may be missed.
 - ``Mutect2.funcotator_use_gnomad`` -- ``true``/``false`` whether Funcotator should use gnomAD as annotation resource. 
 
 Resources:
