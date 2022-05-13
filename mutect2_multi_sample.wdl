@@ -25,11 +25,20 @@ version development
 ## run_realignment_filter_only_on_high_confidence_variants:
 ## select_low_conficence_variants_jexl_arg: JEXL filtering expression to select low
 ##      confidence somatic variants. See the default value for formatting details.
+## run_cnn_scoring_model: Setting it to true will probably fail. Need to wait for
+##      updates to the tool.
 ## run_funcotator:
-## keep_germline: retains germline variants; currently not supported. They are being
-##      filtered by the SelectVariants task.
+##
 ## compress_output:
 ## make_bamout:
+## funcotator_use_gnomad:
+## keep_germline: retains germline variants; currently not supported. They are being
+##      filtered by the SelectVariants task.
+## genotype_germline_sites: Use with care! https://github.com/broadinstitute/gatk/issues/7391
+## genotype_pon_sites:
+## native_pair_hmm_use_double_precision:
+## use_linked_de_bruijn_graph:
+## recover_all_dangling_branches:
 ##
 ## ** Primary resources ** (optional but strongly recommended)
 ## panel_of_normals, panel_of_normals_idx: optional panel of normals (and its index)
@@ -126,17 +135,19 @@ workflow MultiSampleMutect2 {
         Boolean run_variant_filter = true
         Boolean run_realignment_filter = true
         Boolean run_realignment_filter_only_on_high_confidence_variants = false
+        Boolean run_cnn_scoring_model = false  # probably leads to failure if true
         Boolean run_funcotator = true
-        Boolean keep_germline = false  # not currently supported
+
         Boolean compress_output = true
         Boolean make_bamout = false
-        Boolean funcotator_use_gnomad = true
 
-        Boolean genotype_germline_sites = false
-        Boolean genotype_pon_sites = false
+        Boolean keep_germline = false  # not currently supported
+        Boolean genotype_germline_sites = false  # use with care!
+        Boolean genotype_pon_sites = false  # use with care!
         Boolean native_pair_hmm_use_double_precision = true
         Boolean use_linked_de_bruijn_graph = true
         Boolean recover_all_dangling_branches = true
+        Boolean funcotator_use_gnomad = true
 
         # expose extra arguments for import of this workflow
         String? split_intervals_extra_args
@@ -181,11 +192,13 @@ workflow MultiSampleMutect2 {
         Int merge_vcfs_mem = 512
         Int merge_mutect_stats_mem = 512 # 64
         Int merge_bams_mem = 8192  # wants at least 6G
+        Int cnn_scoring_mem = 4096
         Int funcotate_mem = 4096
 
         # Increasing cpus likely increases costs by the same factor.
         Int variant_call_cpu = 1  # good for PairHMM: 2
         Int filter_alignment_artifacts_cpu = 1  # good for PairHMM: 4
+        Int cnn_scoring_cpu = 1
     }
 
     Array[File] non_optional_normal_bams = select_first([normal_bams, []])
@@ -570,7 +583,7 @@ workflow MultiSampleMutect2 {
         }
     }
 
-    if (run_funcotator) {
+    if (run_cnn_scoring_model || run_funcotator) {
         # Funcotator is not designed to differentiate between samples. The tool uses the
         # position and allele information to get annotations but does not annotate per
         # sample. We use a workaround by splitting the multi-sample VCF into individual
@@ -589,8 +602,13 @@ workflow MultiSampleMutect2 {
             }
             # We select the first normal sample to be the matched normal.
             # todo: select normal with greatest sequencing depth
+            # The default CNNScoreVariant model should not be used on VCFs with
+            # annotations from a joint call-set. If the user chooses to run the CNN model,
+            # we remove the matched normal sample from the VCF annotations. This only
+            # results in the normal sample allelic coverage not being available for each
+            # annotated variant.
             String normal_sample_name = (
-                if normal_is_present
+                if normal_is_present && !run_cnn_scoring_model
                 then select_first(select_first([GetNormalSampleName.sample_name]))
                 else "Unknown"
             )
@@ -609,25 +627,50 @@ workflow MultiSampleMutect2 {
                     memoryMB = select_variants_mem
             }
 
-            call Funcotate {
-                input:
-                    ref_fasta = ref_fasta,
-                    ref_fasta_index = ref_fasta_index,
-                    ref_dict = ref_dict,
-                    interval_list = interval_list,
-                    input_vcf = SelectSampleVariants.selected_vcf,
-                    input_vcf_idx = SelectSampleVariants.selected_vcf_idx,
-                    output_base_name = GetTumorSampleName.sample_name,
-                    individual_id = individual_id,
-                    tumor_sample_name = GetTumorSampleName.sample_name,
-                    normal_sample_name = if normal_sample_name != "Unknown" then normal_sample_name else None,
-                    transcript_list = funcotator_transcript_list,
-                    data_sources_tar_gz = funcotator_data_sources_tar_gz,
-                    use_gnomad = funcotator_use_gnomad,
-                    compress_output = compress_output,
-                    funcotate_extra_args = funcotate_extra_args,
-                    runtime_params = standard_runtime,
-                    memoryMB = funcotate_mem
+            if (run_cnn_scoring_model) {
+                call CNNScoreVariants {
+                    input:
+                        ref_fasta = ref_fasta,
+                        ref_fasta_index = ref_fasta_index,
+                        ref_dict = ref_dict,
+                        input_vcf = SelectSampleVariants.selected_vcf,
+                        input_vcf_idx = SelectSampleVariants.selected_vcf_idx,
+                        tumor_bam = tumor_bam,
+                        tumor_bai = tumor_bai,
+                        runtime_params = standard_runtime,
+                        memoryMB = cnn_scoring_mem,
+                        cpu = cnn_scoring_cpu
+                }
+            }
+
+            if (run_funcotator) {
+                call Funcotate {
+                    input:
+                        ref_fasta = ref_fasta,
+                        ref_fasta_index = ref_fasta_index,
+                        ref_dict = ref_dict,
+                        interval_list = interval_list,
+                        input_vcf = (
+                            if run_cnn_scoring_model
+                            then select_first([CNNScoreVariants.scored_vcf])
+                            else SelectSampleVariants.selected_vcf
+                        ),
+                        input_vcf_idx =(
+                            if run_cnn_scoring_model
+                            then select_first([CNNScoreVariants.scored_vcf_idx])
+                            else SelectSampleVariants.selected_vcf_idx
+                        ),
+                        output_base_name = GetTumorSampleName.sample_name + ".annotated",
+                        tumor_sample_name = GetTumorSampleName.sample_name,
+                        normal_sample_name = if normal_sample_name != "Unknown" then normal_sample_name else None,
+                        transcript_list = funcotator_transcript_list,
+                        data_sources_tar_gz = funcotator_data_sources_tar_gz,
+                        use_gnomad = funcotator_use_gnomad,
+                        compress_output = compress_output,
+                        funcotate_extra_args = funcotate_extra_args,
+                        runtime_params = standard_runtime,
+                        memoryMB = funcotate_mem
+                }
             }
         }
     }
@@ -644,6 +687,8 @@ workflow MultiSampleMutect2 {
         File? read_orientation_model_params = LearnReadOrientationModel.orientation_bias
         Array[File]? contamination_table = CalculateContamination.contamination_table
         Array[File]? tumor_segmentation = CalculateContamination.tumor_segmentation
+        Array[File?]? scored_file = CNNScoreVariants.scored_vcf
+        Array[File?]? scored_file_idx = CNNScoreVariants.scored_vcf_idx
         Array[File?]? funcotated_file = Funcotate.funcotated_output_file
         Array[File?]? funcotated_file_index = Funcotate.funcotated_output_file_index
     }
@@ -1513,6 +1558,74 @@ task MergeBamOuts {
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
         cpu: runtime_params.cpu
+    }
+}
+
+task CNNScoreVariants {
+    # Apply a Convolutional Neural Net to filter annotated variants.
+    # The default models were trained on single-sample VCFs. The default model should
+    # not be used on VCFs with annotations from joint call-sets.
+
+    input {
+        File ref_fasta
+        File ref_fasta_index
+        File ref_dict
+        File input_vcf
+        File input_vcf_idx
+        File tumor_bam
+        File tumor_bai
+
+        Boolean compress_output = false
+        String? cnn_score_variants_extra_args
+
+        Runtime runtime_params
+        String? gatk_docker
+        Int? memoryMB = 4096
+        Int? cpu = 1  # wants 4
+    }
+
+    parameter_meta {
+        ref_fasta: {localization_optional: true}
+        ref_fasta_index: {localization_optional: true}
+        ref_dict: {localization_optional: true}
+        input_vcf: {localization_optional: true}
+        input_vcf_idx: {localization_optional: true}
+        tumor_bam: {localization_optional: true}
+        tumor_bai: {localization_optional: true}
+    }
+
+    Int disk_spaceGB = runtime_params.disk
+
+    String output_base_name = basename(basename(input_vcf, ".gz"), ".vcf") + ".cnn_scored"
+    String output_vcf = output_base_name + if compress_output then ".vcf.gz" else ".vcf"
+    String output_vcf_idx = output_vcf + if compress_output then ".tbi" else ".idx"
+
+    command <<<
+        set -e
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
+            CNNScoreVariants \
+            -I ~{tumor_bam} \
+            --variant ~{input_vcf} \
+            --reference ~{ref_fasta} \
+            --output ~{output_vcf} \
+            -tensor-type read_tensor \
+            ~{cnn_score_variants_extra_args}
+    >>>
+
+  	output {
+  		File scored_vcf = output_vcf
+  		File scored_vcf_idx = output_vcf_idx
+  	}
+
+    runtime {
+        docker: select_first([gatk_docker, runtime_params.gatk_docker])
+        bootDiskSizeGb: runtime_params.boot_disk_size
+        memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        disks: "local-disk " + disk_spaceGB + " HDD"
+        preemptible: runtime_params.preemptible
+        maxRetries: runtime_params.max_retries
+        cpu: cpu
     }
 }
 

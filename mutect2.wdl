@@ -24,17 +24,18 @@ workflow Mutect2 {
         Boolean run_variant_filter = true
         Boolean run_realignment_filter = true
         Boolean run_realignment_filter_only_on_high_confidence_variants = false
+        Boolean run_cnn_scoring_model = false  # probably leads to failure if true
         Boolean run_funcotator = true
-        Boolean keep_germline = false  # not currently supported
+
         Boolean compress_output = true
         Boolean make_bamout = false
-        Boolean funcotator_use_gnomad = true
-
-        Boolean genotype_germline_sites = true
-        Boolean genotype_pon_sites = true
+        Boolean keep_germline = false  # not currently supported
+        Boolean genotype_germline_sites = false  # use with care!
+        Boolean genotype_pon_sites = false  # use with care!
         Boolean native_pair_hmm_use_double_precision = true
         Boolean use_linked_de_bruijn_graph = true
         Boolean recover_all_dangling_branches = true
+        Boolean funcotator_use_gnomad = true
 
         # expose extra arguments for import of this workflow
         String? split_intervals_extra_args
@@ -79,11 +80,13 @@ workflow Mutect2 {
         Int merge_vcfs_mem = 512
         Int merge_mutect_stats_mem = 512 # 64
         Int merge_bams_mem = 8192  # wants at least 6G
+        Int cnn_scoring_mem = 4096
         Int funcotate_mem = 4096
 
         # Increasing cpus likely increases costs by the same factor.
         Int variant_call_cpu = 1  # good for PairHMM: 2
         Int filter_alignment_artifacts_cpu = 1  # good for PairHMM: 4
+        Int cnn_scoring_cpu = 1
     }
 
     Runtime standard_runtime = {
@@ -122,17 +125,19 @@ workflow Mutect2 {
             run_variant_filter = run_variant_filter,
             run_realignment_filter = run_realignment_filter,
             run_realignment_filter_only_on_high_confidence_variants = run_realignment_filter_only_on_high_confidence_variants,
+            run_cnn_scoring_model = run_cnn_scoring_model,
             run_funcotator = run_funcotator,
-            keep_germline = keep_germline,
+
             compress_output = compress_output,
             make_bamout = make_bamout,
-            funcotator_use_gnomad = funcotator_use_gnomad,
 
+            keep_germline = keep_germline,
             genotype_germline_sites = genotype_germline_sites,
             genotype_pon_sites = genotype_pon_sites,
             native_pair_hmm_use_double_precision = native_pair_hmm_use_double_precision,
             use_linked_de_bruijn_graph = use_linked_de_bruijn_graph,
             recover_all_dangling_branches = recover_all_dangling_branches,
+            funcotator_use_gnomad = funcotator_use_gnomad,
 
             split_intervals_extra_args = split_intervals_extra_args,
             m2_extra_args = m2_extra_args,
@@ -173,10 +178,12 @@ workflow Mutect2 {
             merge_vcfs_mem = merge_vcfs_mem,
             merge_mutect_stats_mem = merge_mutect_stats_mem,
             merge_bams_mem = merge_bams_mem,
+            cnn_scoring_mem = cnn_scoring_mem,
             funcotate_mem = funcotate_mem,
 
             variant_call_cpu = variant_call_cpu,
             filter_alignment_artifacts_cpu = filter_alignment_artifacts_cpu,
+            cnn_scoring_cpu = cnn_scoring_cpu
     }
 
     output {
@@ -191,6 +198,8 @@ workflow Mutect2 {
         File? read_orientation_model_params = MultiSampleMutect2.read_orientation_model_params
         Array[File]? contamination_table = MultiSampleMutect2.contamination_table
         Array[File]? tumor_segmentation = MultiSampleMutect2.tumor_segmentation
+        Array[File?]? scored_file = MultiSampleMutect2.scored_file
+        Array[File?]? scored_file_idx = MultiSampleMutect2.scored_file_idx
         Array[File?]? funcotated_file = MultiSampleMutect2.funcotated_file
         Array[File?]? funcotated_file_index = MultiSampleMutect2.funcotated_file_index
     }

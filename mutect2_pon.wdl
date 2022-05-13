@@ -81,6 +81,7 @@ workflow Mutect2_Panel {
                 run_orientation_bias_mixture_model = false,
                 run_variant_filter = false,
                 run_realignment_filter = false,
+                run_cnn_scoring_model = false,
                 run_funcotator = false,
                 compress_output = compress_output,
                 scatter_count = scatter_count,

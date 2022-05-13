@@ -42,15 +42,21 @@ workflow Mutect2NormalNormal {
         Boolean run_orientation_bias_mixture_model = true
         Boolean run_variant_filter = true
         Boolean run_realignment_filter = true
-        Boolean keep_germline = false  # not currently supported
+
         Boolean compress_output = true
         Boolean make_bamout = false
+
+        Boolean keep_germline = false  # not currently supported
+        Boolean native_pair_hmm_use_double_precision = true
+        Boolean use_linked_de_bruijn_graph = true
+        Boolean recover_all_dangling_branches = true
 
         # expose extra arguments for import of this workflow
         String? split_intervals_extra_args
         String? m2_extra_args
         String? m2_filter_extra_args
         String? select_variants_extra_args
+        String? select_low_conficence_variants_jexl_arg
         String? realignment_extra_args
 
         # resources
@@ -116,16 +122,24 @@ workflow Mutect2NormalNormal {
 					run_contamination_model = run_contamination_model,
 					run_orientation_bias_mixture_model = run_orientation_bias_mixture_model,
 					run_variant_filter = run_variant_filter,
+					run_realignment_filter_only_on_high_confidence_variants = false,
 					run_realignment_filter = run_realignment_filter,
+					run_cnn_scoring_model = false,
 					run_funcotator = false,
-					keep_germline = keep_germline,
+
 					compress_output = compress_output,
 					make_bamout = make_bamout,
+
+					keep_germline = keep_germline,
+					native_pair_hmm_use_double_precision = native_pair_hmm_use_double_precision,
+					use_linked_de_bruijn_graph = use_linked_de_bruijn_graph,
+					recover_all_dangling_branches = recover_all_dangling_branches,
 
 					split_intervals_extra_args = split_intervals_extra_args,
 					m2_extra_args = m2_extra_args,
 					m2_filter_extra_args = m2_filter_extra_args,
 					select_variants_extra_args = select_variants_extra_args,
+					select_low_conficence_variants_jexl_arg = select_low_conficence_variants_jexl_arg,
 					realignment_extra_args = realignment_extra_args,
 
 					panel_of_normals = panel_of_normals,
