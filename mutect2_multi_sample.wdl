@@ -637,6 +637,7 @@ workflow MultiSampleMutect2 {
                         input_vcf_idx = SelectSampleVariants.selected_vcf_idx,
                         tumor_bam = tumor_bam,
                         tumor_bai = tumor_bai,
+                        compress_output = compress_output,
                         runtime_params = standard_runtime,
                         memoryMB = cnn_scoring_mem,
                         cpu = cnn_scoring_cpu
