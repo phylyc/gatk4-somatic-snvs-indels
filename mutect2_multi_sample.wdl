@@ -154,7 +154,7 @@ workflow MultiSampleMutect2 {
         String? m2_extra_args
         String? m2_filter_extra_args
         String? select_variants_extra_args
-        String? select_low_conficence_variants_jexl_arg = "'(vc.getAttribute(\"GERMQ\") < 30) || (vc.getAttribute(\"DP\") < 4) || (vc.getAttribute(\"MBQ\").0 == 0) || (vc.getAttribute(\"MFRL\").0 == 0)'"
+        String? select_low_conficence_variants_jexl_arg = "'(vc.getAttribute(\"GERMQ\") < 30) || (vc.getAttribute(\"DP\") < 4)'"
         String? realignment_extra_args
         String? funcotate_extra_args
 
@@ -185,7 +185,7 @@ workflow MultiSampleMutect2 {
         Int learn_read_orientation_model_base_mem = 6144
         Int get_pileup_summaries_mem = 2048  # needs at least 2G
         Int gather_pileup_summaries_mem = 512  # 64
-        Int calculate_contamination_mem = 512
+        Int calculate_contamination_mem = 6144  # depends on the variants_for_contamination resource
         Int filter_mutect_calls_mem = 4096
         Int select_variants_mem = 2048
         Int filter_alignment_artifacts_mem = 4096
@@ -729,8 +729,8 @@ task SplitIntervals {
         mkdir interval-files
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             SplitIntervals \
-            -R ~{ref_fasta} \
-            ~{"-L " + interval_list} \
+            -R '~{ref_fasta}' \
+            ~{"-L '" + interval_list + "'"} \
             -scatter ~{scatter_count} \
             -O interval-files \
             ~{extra_args}
@@ -769,9 +769,8 @@ task GetSampleName {
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             GetSampleName \
-            -I ~{bam} \
-            -O bam_name.txt \
-            -encode
+            -I '~{bam}' \
+            -O bam_name.txt
         cat bam_name.txt
     >>>
 
@@ -867,16 +866,16 @@ task VariantCall {
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
         gatk --java-options "-Xmx~{memoryMB}m" \
             Mutect2 \
-            --reference ~{ref_fasta} \
-            ~{sep=" " prefix("-I ", tumor_bams)} \
-            ~{true="-I " false="" normal_is_present}~{default="" sep=" -I " normal_bams} \
-            ~{true="-normal " false="" normal_is_present}~{default="" sep=" -normal " normal_sample_names} \
-            --output ~{output_vcf} \
-            ~{"--intervals " + interval_list} \
-            ~{"-pon " + panel_of_normals} \
+            --reference '~{ref_fasta}' \
+            ~{sep="' " prefix("-I '", tumor_bams)}' \
+            ~{true="-I '" false="" normal_is_present}~{default="" sep="' -I '" normal_bams}~{true="'" false="" normal_is_present} \
+            ~{true="-normal '" false="" normal_is_present}~{default="" sep="' -normal '" normal_sample_names}~{true="'" false="" normal_is_present} \
+            --output '~{output_vcf}' \
+            ~{"--intervals '" + interval_list + "'"} \
+            ~{"-pon '" + panel_of_normals + "'"} \
             ~{make_bamout_arg} \
             ~{run_ob_filter_arg} \
-            ~{"--germline-resource " + germline_resource} \
+            ~{"--germline-resource '" + germline_resource + "'"} \
             ~{true="--genotype-germline-sites true" false="" genotype_germline_sites} \
             ~{true="--genotype-pon-sites true" false="" genotype_pon_sites} \
             ~{true="--linked-de-bruijn-graph true" false="" use_linked_de_bruijn_graph} \
@@ -930,8 +929,8 @@ task MergeMutectStats {
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             MergeMutectStats \
-            ~{sep=" " prefix("-stats ", stats)} \
-            --output ~{output_name}
+            ~{sep="' " prefix("-stats '", stats)}' \
+            --output '~{output_name}'
     >>>
 
     output {
@@ -989,8 +988,8 @@ task LearnReadOrientationModel {
 
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             LearnReadOrientationModel \
-            ~{sep=" " prefix("-I ", f1r2_counts)} \
-            --output ~{output_name}
+            ~{sep="' " prefix("-I '", f1r2_counts)}' \
+            --output '~{output_name}'
     >>>
 
     output {
@@ -1050,12 +1049,12 @@ task GetPileupSummaries {
 
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             GetPileupSummaries \
-            --input ~{input_bam} \
-            --intervals ~{interval_list} \
-            --intervals ~{variants_for_contamination} \
+            --input '~{input_bam}' \
+            --intervals '~{interval_list}' \
+            --intervals '~{variants_for_contamination}' \
             --interval-set-rule INTERSECTION \
-            --variant ~{variants_for_contamination} \
-            --output ~{output_name} \
+            --variant '~{variants_for_contamination}' \
+            --output '~{output_name}' \
             ~{getpileupsummaries_extra_args}
 
         # It only fails due to empty intersection between variants and intervals, which is ok.
@@ -1098,9 +1097,9 @@ task GatherPileupSummaries {
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             GatherPileupSummaries \
-            --sequence-dictionary ~{ref_dict} \
-            ~{sep=" " prefix("-I ", input_tables)} \
-            -O ~{output_name}
+            --sequence-dictionary '~{ref_dict}' \
+            ~{sep="' " prefix("-I '", input_tables)}' \
+            -O '~{output_name}'
     >>>
 
     output {
@@ -1151,10 +1150,10 @@ task CalculateContamination {
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             CalculateContamination \
-            --input ~{tumor_pileups} \
-            ~{"--matched-normal " + normal_pileups} \
-            --output ~{output_contamination} \
-            --tumor-segmentation ~{output_segments}
+            --input '~{tumor_pileups}' \
+            ~{"--matched-normal '" + normal_pileups + "'"} \
+            --output '~{output_contamination}' \
+            --tumor-segmentation '~{output_segments}'
     >>>
 
     output {
@@ -1230,17 +1229,17 @@ task FilterMutectCalls {
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             FilterMutectCalls \
-            --reference ~{ref_fasta} \
-            --variant ~{input_vcf} \
-            --output ~{output_vcf} \
-            ~{"--orientation-bias-artifact-priors " + orientation_bias} \
-            ~{true="--contamination-table " false="" defined(contamination_tables)}~{default="" sep=" --contamination-table " contamination_tables} \
-            ~{true="--tumor-segmentation " false="" defined(tumor_segmentation)}~{default="" sep=" --tumor-segmentation " tumor_segmentation} \
-            ~{"--stats " + mutect_stats} \
+            --reference '~{ref_fasta}' \
+            --variant '~{input_vcf}' \
+            --output '~{output_vcf}' \
+            ~{"--orientation-bias-artifact-priors '" + orientation_bias + "'"} \
+            ~{true="--contamination-table '" false="" defined(contamination_tables)}~{default="" sep="' --contamination-table '" contamination_tables}~{true="'" false="" defined(contamination_tables)} \
+            ~{true="--tumor-segmentation '" false="" defined(tumor_segmentation)}~{default="" sep="' --tumor-segmentation '" tumor_segmentation}~{true="'" false="" defined(tumor_segmentation)} \
+            ~{"--stats '" + mutect_stats + "'"} \
             ~{"--max-median-fragment-length-difference " + max_median_fragment_length_difference} \
             ~{"--min-median-base-quality " + min_alt_median_base_quality} \
             ~{"--min-median-mapping-quality " + min_alt_median_mapping_quality} \
-            --filtering-stats ~{output_base_name}.stats \
+            --filtering-stats '~{output_base_name}.stats' \
             --seconds-between-progress-updates 300 \
             ~{m2_filter_extra_args}
     >>>
@@ -1318,11 +1317,11 @@ task FilterAlignmentArtifacts {
         # requested.
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             FilterAlignmentArtifacts \
-            ~{sep=" " prefix("-I ", tumor_bams)} \
-            --variant ~{input_vcf} \
-            --reference ~{ref_fasta} \
-            --bwa-mem-index-image ~{bwa_mem_index_image} \
-            --output ~{output_vcf} \
+            ~{sep="' " prefix("-I '", tumor_bams)}' \
+            --variant '~{input_vcf}' \
+            --reference '~{ref_fasta}' \
+            --bwa-mem-index-image '~{bwa_mem_index_image}' \
+            --output '~{output_vcf}' \
             --max-reasonable-fragment-length ~{max_reasonable_fragment_length} \
             --dont-skip-filtered-variants true \
             ~{realignment_extra_args}
@@ -1375,7 +1374,7 @@ task SelectVariants {
     }
 
     String uncompressed_filtered_vcf = basename(filtered_vcf, ".gz")
-    String base_name = if defined(tumor_sample_name) then tumor_sample_name else basename(uncompressed_filtered_vcf, ".vcf")
+    String base_name = if defined(tumor_sample_name) then sub(select_first([tumor_sample_name, ""]), " ", "+") else basename(uncompressed_filtered_vcf, ".vcf")
     String output_base_name = base_name + ".selected"
     String uncompressed_output_vcf = output_base_name + ".vcf"
     String output_vcf = uncompressed_output_vcf + if compress_output then ".gz" else ""
@@ -1397,13 +1396,13 @@ task SelectVariants {
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             SelectVariants \
-            ~{"-R " + ref_fasta} \
-            ~{"-L " + interval_list} \
-            -V ~{filtered_vcf} \
-            --output ~{uncompressed_output_vcf} \
+            ~{"-R '" + ref_fasta + "'"} \
+            ~{"-L '" + interval_list + "'"} \
+            -V '~{filtered_vcf}' \
+            --output '~{uncompressed_output_vcf}' \
             --exclude-filtered ~{exclude_filtered} \
-            ~{"--sample-name " + tumor_sample_name} \
-            ~{"--sample-name " + normal_sample_name} \
+            ~{"--sample-name '" + tumor_sample_name + "'"} \
+            ~{"--sample-name '" + normal_sample_name + "'"} \
             ~{select_true_variants_arg} \
             ~{select_variants_extra_args}
 
@@ -1416,23 +1415,23 @@ task SelectVariants {
 
         if ~{defined(tumor_sample_name)} ; then
             echo ">> Fixing tumor sample name in vcf header ... "
-            input_header=~{dollar}(grep "##tumor_sample=" ~{uncompressed_output_vcf})
+            input_header=~{dollar}(grep "##tumor_sample=" '~{uncompressed_output_vcf}')
             corrected_header="##tumor_sample=~{tumor_sample_name}"
-            sed -i "s/~{dollar}input_header/~{dollar}corrected_header/g" ~{uncompressed_output_vcf}
+            sed -i "s/~{dollar}input_header/~{dollar}corrected_header/g" '~{uncompressed_output_vcf}'
         fi
         if ~{defined(normal_sample_name)} ; then
             echo ">> Fixing normal sample name in vcf header ... "
-            input_header=~{dollar}(grep "##normal_sample=" ~{uncompressed_output_vcf})
+            input_header=~{dollar}(grep "##normal_sample=" '~{uncompressed_output_vcf}')
             corrected_header="##normal_sample=~{normal_sample_name}"
-            sed -i "s/~{dollar}input_header/~{dollar}corrected_header/g" ~{uncompressed_output_vcf}
+            sed -i "s/~{dollar}input_header/~{dollar}corrected_header/g" '~{uncompressed_output_vcf}'
         fi
         if ~{compress_output} ; then
             echo ">> Compressing selected vcf."
-            bgzip -c ~{uncompressed_output_vcf} > ~{output_vcf}
+            bgzip -c '~{uncompressed_output_vcf}' > '~{output_vcf}'
             gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
                 IndexFeatureFile \
-                --input ~{output_vcf} \
-                --output ~{output_vcf_idx}
+                --input '~{output_vcf}' \
+                --output '~{output_vcf_idx}'
         fi
     >>>
 
@@ -1479,8 +1478,8 @@ task MergeVCFs {
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             MergeVcfs \
-            ~{sep=" " prefix("-I ", input_vcfs)} \
-            -O ~{output_vcf}
+            ~{sep="' " prefix("-I '", input_vcfs)}' \
+            -O '~{output_vcf}'
     >>>
 
     output {
@@ -1526,9 +1525,9 @@ task MergeBamOuts {
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             GatherBamFiles \
-            ~{sep=" " prefix("-I ", m2_bam_outs)} \
+            ~{sep="' " prefix("-I '", m2_bam_outs)}' \
             -O unsorted.out.bam \
-            -R ~{ref_fasta}
+            -R '~{ref_fasta}'
 
         # We must sort because adjacent scatters may have overlapping (padded) assembly
         # regions, hence overlapping bamouts
@@ -1536,13 +1535,13 @@ task MergeBamOuts {
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             SortSam \
             -I unsorted.out.bam \
-            -O ~{output_vcf_name}.out.bam \
+            -O '~{output_vcf_name}.out.bam' \
             --SORT_ORDER coordinate \
             -VALIDATION_STRINGENCY LENIENT
 
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             BuildBamIndex \
-            -I ~{output_vcf_name}.out.bam \
+            -I '~{output_vcf_name}.out.bam' \
             -VALIDATION_STRINGENCY LENIENT
     >>>
 
@@ -1606,10 +1605,10 @@ task CNNScoreVariants {
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             CNNScoreVariants \
-            -I ~{tumor_bam} \
-            --variant ~{input_vcf} \
-            --reference ~{ref_fasta} \
-            --output ~{output_vcf} \
+            -I '~{tumor_bam}' \
+            --variant '~{input_vcf}' \
+            --reference '~{ref_fasta}' \
+            --output '~{output_vcf}' \
             -tensor-type read_tensor \
             ~{cnn_score_variants_extra_args}
     >>>
@@ -1738,15 +1737,15 @@ task Funcotate {
             --data-sources-path $DATA_SOURCES_FOLDER \
             --ref-version ~{reference_version} \
             --output-file-format ~{output_format} \
-            -R ~{ref_fasta} \
-            -V ~{input_vcf} \
-            -O ~{output_file} \
-            ~{"-L " + interval_list} \
+            -R '~{ref_fasta}' \
+            -V '~{input_vcf}' \
+            -O '~{output_file}' \
+            ~{"-L '" + interval_list + "'"} \
             ~{"--transcript-selection-mode " + transcript_selection_mode} \
-            ~{"--transcript-list " + transcript_list} \
-            --annotation-default individual_id:~{default="Unknown" individual_id} \
-            --annotation-default tumor_barcode:~{default="Unknown" tumor_sample_name} \
-            --annotation-default normal_barcode:~{default="Unknown" normal_sample_name} \
+            ~{"--transcript-list '" + transcript_list + "'"} \
+            --annotation-default 'individual_id:~{default="Unknown" individual_id}' \
+            --annotation-default 'tumor_barcode:~{default="Unknown" tumor_sample_name}' \
+            --annotation-default 'normal_barcode:~{default="Unknown" normal_sample_name}' \
             ~{true="--annotation-default " false="" defined(annotation_defaults)}~{default="" sep=" --annotation-default " annotation_defaults} \
             ~{true="--annotation-override " false="" defined(annotation_overrides)}~{default="" sep=" --annotation-override " annotation_overrides} \
             ~{true="--exclude-field " false="" defined(exclude_fields)}~{default="" sep=" --exclude-field " exclude_fields} \
@@ -1754,7 +1753,7 @@ task Funcotate {
 
         # Make sure we have a placeholder index for MAF files so this workflow doesn't fail:
         if [[ "~{output_format}" == "MAF" ]] ; then
-            touch ~{output_maf_index}
+            touch '~{output_maf_index}'
         fi
     >>>
 
