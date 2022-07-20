@@ -180,20 +180,20 @@ workflow MultiSampleMutect2 {
         # memory assignments in MB
         Int additional_per_sample_mem = 256  # this actually can depend on bam size (WES vs WGS)
         Int split_intervals_mem = 512  # 64
-        Int get_sample_name_mem = 512  # 256
+        Int get_sample_name_mem = 512
         Int variant_call_base_mem = 4096
         Int learn_read_orientation_model_base_mem = 6144
         Int get_pileup_summaries_mem = 2048  # needs at least 2G
         Int gather_pileup_summaries_mem = 512  # 64
-        Int calculate_contamination_mem = 6144  # depends on the variants_for_contamination resource
+        Int calculate_contamination_mem = 3072  # depends on the variants_for_contamination resource
         Int filter_mutect_calls_mem = 4096
-        Int select_variants_mem = 2048
-        Int filter_alignment_artifacts_mem = 4096
+        Int select_variants_mem = 1024
+        Int filter_alignment_artifacts_mem = 2048  # needs to be increased of some cases
         Int merge_vcfs_mem = 512
         Int merge_mutect_stats_mem = 512 # 64
         Int merge_bams_mem = 8192  # wants at least 6G
         Int cnn_scoring_mem = 4096
-        Int funcotate_mem = 4096
+        Int funcotate_mem = 3072
 
         # Increasing cpus likely increases costs by the same factor.
         Int variant_call_cpu = 1  # good for PairHMM: 2
