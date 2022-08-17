@@ -1,6 +1,6 @@
 version development
 
-import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/create_AF_only_germline_resource_from_file.wdl" as singleAFonly
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/create_AF_only_germline_resource.wdl" as singleAFonly
 
 workflow CreateAFonlyVcf_from_File {
     input {
