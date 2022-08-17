@@ -21,7 +21,7 @@ workflow CreateAFonlyVcf {
         File vcf
         File vcf_idx
 
-        Boolean compress_output = false
+        Boolean compress_output = true
 
         # runtime
         String gatk_docker = "broadinstitute/gatk"
