@@ -154,7 +154,7 @@ workflow MultiSampleMutect2 {
         String? m2_extra_args
         String? m2_filter_extra_args
         String? select_variants_extra_args
-        String? select_low_conficence_variants_jexl_arg = "'(vc.getAttribute(\"GERMQ\") < 30) || (vc.getAttribute(\"DP\") < 4)'"
+        String? select_low_conficence_variants_jexl_arg = "'(vc.getAttribute(\"GERMQ\") < 30) || (vc.getAttribute(\"DP\") < 4) || (vc.getAttribute(\"MBQ\").0 == 0) || (vc.getAttribute(\"MFRL\").0 == 0)'"
         String? realignment_extra_args
         String? funcotate_extra_args
 
@@ -1118,7 +1118,7 @@ task GatherPileupSummaries {
 }
 
 task CalculateContamination {
-    # This tool is set, by default, to operate over the intersection of your germling
+    # This tool is set, by default, to operate over the intersection of your germline
     # biallelic resource with your specified intervals. The tool works by pulling down
     # alt and ref allele counts at locuses defined in the biallelic_germline_resource
     # and comparing the number of observed alt counts compared to the number of expected
