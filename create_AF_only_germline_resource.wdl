@@ -69,10 +69,10 @@ workflow CreateAFonlyVcf {
     output {
         File af_only_vcf = SelectVariants.filtered_vcf
         File af_only_vcf_idx = SelectVariants.filtered_vcf_idx
-  		File biallelic_af_only_vcf = SelectVariants.biallelic_af_only_vcf
-  		File biallelic_af_only_vcf_idx = SelectVariants.biallelic_af_only_vcf_idx
-        File multiallelic_af_only_vcf = SelectVariants.multiallelic_af_only_vcf
-        File multiallelic_af_only_vcf_idx = SelectVariants.multiallelic_af_only_vcf_idx
+  		File? biallelic_af_only_vcf = SelectVariants.biallelic_af_only_vcf
+  		File? biallelic_af_only_vcf_idx = SelectVariants.biallelic_af_only_vcf_idx
+        File? multiallelic_af_only_vcf = SelectVariants.multiallelic_af_only_vcf
+        File? multiallelic_af_only_vcf_idx = SelectVariants.multiallelic_af_only_vcf_idx
     }
 }
 
