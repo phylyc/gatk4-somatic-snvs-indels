@@ -22,6 +22,8 @@ workflow CreateAFonlyVcf {
         File vcf_idx
 
         Boolean compress_output = true
+        Boolean create_biallelic = false
+        Boolean create_multiallelic = false
 
         # runtime
         String gatk_docker = "broadinstitute/gatk"
@@ -59,6 +61,8 @@ workflow CreateAFonlyVcf {
             vcf = SelectAFonly.af_only_vcf,
             vcf_idx = SelectAFonly.af_only_vcf_idx,
             compress_output = compress_output,
+            create_biallelic = create_biallelic,
+            create_multiallelic = create_multiallelic,
             runtime_params = standard_runtime
     }
 
@@ -126,6 +130,8 @@ task SelectVariants {
         File vcf
         File vcf_idx
         Boolean compress_output = true
+        Boolean create_biallelic = false
+        Boolean create_multiallelic = false
         String? select_variants_extra_args
 
         Runtime runtime_params
@@ -160,30 +166,36 @@ task SelectVariants {
             --exclude-filtered true \
             ~{select_variants_extra_args}
 
-        gatk --java-options "-Xmx~{runtime_params.command_mem}m" \
-            SelectVariants \
-            -R ~{ref_fasta} \
-            -V ~{filtered_vcf_} \
-            --output ~{biallelic_af_only_vcf_} \
-            --restrict-alleles-to BIALLELIC \
-            ~{select_variants_extra_args}
+        if ~{create_biallelic}
+        then
+            gatk --java-options "-Xmx~{runtime_params.command_mem}m" \
+                SelectVariants \
+                -R ~{ref_fasta} \
+                -V ~{filtered_vcf_} \
+                --output ~{biallelic_af_only_vcf_} \
+                --restrict-alleles-to BIALLELIC \
+                ~{select_variants_extra_args}
+        fi
 
-        gatk --java-options "-Xmx~{runtime_params.command_mem}m" \
-            SelectVariants \
-            -R ~{ref_fasta} \
-            -V ~{filtered_vcf_} \
-            --output ~{multiallelic_af_only_vcf_} \
-            --restrict-alleles-to MULTIALLELIC \
-            ~{select_variants_extra_args}
+        if ~{create_multiallelic}
+        then
+            gatk --java-options "-Xmx~{runtime_params.command_mem}m" \
+                SelectVariants \
+                -R ~{ref_fasta} \
+                -V ~{filtered_vcf_} \
+                --output ~{multiallelic_af_only_vcf_} \
+                --restrict-alleles-to MULTIALLELIC \
+                ~{select_variants_extra_args}
+        fi
 	>>>
 
 	output {
         File filtered_vcf = filtered_vcf_
         File filtered_vcf_idx = filtered_vcf_idx_
-  		File biallelic_af_only_vcf = biallelic_af_only_vcf_
-  		File biallelic_af_only_vcf_idx = biallelic_af_only_vcf_idx_
-        File multiallelic_af_only_vcf = multiallelic_af_only_vcf_
-        File multiallelic_af_only_vcf_idx = multiallelic_af_only_vcf_idx_
+  		File? biallelic_af_only_vcf = biallelic_af_only_vcf_
+  		File? biallelic_af_only_vcf_idx = biallelic_af_only_vcf_idx_
+        File? multiallelic_af_only_vcf = multiallelic_af_only_vcf_
+        File? multiallelic_af_only_vcf_idx = multiallelic_af_only_vcf_idx_
 	}
 
     runtime {

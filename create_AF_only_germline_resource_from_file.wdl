@@ -12,6 +12,8 @@ workflow CreateAFonlyVcf_from_File {
         File vcfs_idx_file
 
         Boolean compress_output = true
+        Boolean create_biallelic = false
+        Boolean create_multiallelic = false
 
         # runtime
         String gatk_docker = "broadinstitute/gatk"
@@ -33,6 +35,8 @@ workflow CreateAFonlyVcf_from_File {
                 vcf = vcf_pair.left,
                 vcf_idx = vcf_pair.right,
                 compress_output = compress_output,
+                create_biallelic = create_biallelic,
+                create_multiallelic = create_multiallelic,
                 gatk_docker = gatk_docker,
                 gatk_override = gatk_override,
                 preemptible = preemptible,
@@ -53,37 +57,41 @@ workflow CreateAFonlyVcf_from_File {
             max_retries = max_retries,
     }
 
-    call MergeVCFs as MergeBiallelicAFonlyVCFs {
-        input:
-            input_vcfs = CreateAFonlyVcf.biallelic_af_only_vcf,
-            input_vcf_indices = CreateAFonlyVcf.biallelic_af_only_vcf_idx,
-            output_name = "af_only.filtered.biallelic",
-            compress_output = compress_output,
-            gatk_docker = gatk_docker,
-            gatk_override = gatk_override,
-            preemptible = preemptible,
-            max_retries = max_retries,
+    if (create_biallelic) {
+        call MergeVCFs as MergeBiallelicAFonlyVCFs {
+            input:
+                input_vcfs = CreateAFonlyVcf.biallelic_af_only_vcf,
+                input_vcf_indices = CreateAFonlyVcf.biallelic_af_only_vcf_idx,
+                output_name = "af_only.filtered.biallelic",
+                compress_output = compress_output,
+                gatk_docker = gatk_docker,
+                gatk_override = gatk_override,
+                preemptible = preemptible,
+                max_retries = max_retries,
+        }
     }
 
-    call MergeVCFs as MergeMultiallelicAFonlyVCFs {
-        input:
-            input_vcfs = CreateAFonlyVcf.multiallelic_af_only_vcf,
-            input_vcf_indices = CreateAFonlyVcf.multiallelic_af_only_vcf_idx,
-            output_name = "af_only.filtered.multiallelic",
-            compress_output = compress_output,
-            gatk_docker = gatk_docker,
-            gatk_override = gatk_override,
-            preemptible = preemptible,
-            max_retries = max_retries,
+    if (create_multiallelic) {
+        call MergeVCFs as MergeMultiallelicAFonlyVCFs {
+            input:
+                input_vcfs = CreateAFonlyVcf.multiallelic_af_only_vcf,
+                input_vcf_indices = CreateAFonlyVcf.multiallelic_af_only_vcf_idx,
+                output_name = "af_only.filtered.multiallelic",
+                compress_output = compress_output,
+                gatk_docker = gatk_docker,
+                gatk_override = gatk_override,
+                preemptible = preemptible,
+                max_retries = max_retries,
+        }
     }
 
     output {
         File af_only_vcf = MergeAFonlyVCFs.merged_vcf
         File af_only_vcf_idx = MergeAFonlyVCFs.merged_vcf_idx
-  		File biallelic_af_only_vcf = MergeBiallelicAFonlyVCFs.merged_vcf
-  		File biallelic_af_only_vcf_idx = MergeBiallelicAFonlyVCFs.merged_vcf
-        File multiallelic_af_only_vcf = MergeMultiallelicAFonlyVCFs.merged_vcf
-        File multiallelic_af_only_vcf_idx = MergeMultiallelicAFonlyVCFs.merged_vcf
+  		File? biallelic_af_only_vcf = MergeBiallelicAFonlyVCFs.merged_vcf
+  		File? biallelic_af_only_vcf_idx = MergeBiallelicAFonlyVCFs.merged_vcf
+        File? multiallelic_af_only_vcf = MergeMultiallelicAFonlyVCFs.merged_vcf
+        File? multiallelic_af_only_vcf_idx = MergeMultiallelicAFonlyVCFs.merged_vcf
     }
 }
 
