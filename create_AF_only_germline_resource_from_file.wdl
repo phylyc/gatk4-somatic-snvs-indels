@@ -60,8 +60,8 @@ workflow CreateAFonlyVcf_from_File {
     if (create_biallelic) {
         call MergeVCFs as MergeBiallelicAFonlyVCFs {
             input:
-                input_vcfs = CreateAFonlyVcf.biallelic_af_only_vcf,
-                input_vcf_indices = CreateAFonlyVcf.biallelic_af_only_vcf_idx,
+                input_vcfs = select_all(CreateAFonlyVcf.biallelic_af_only_vcf),
+                input_vcf_indices = select_all(CreateAFonlyVcf.biallelic_af_only_vcf_idx),
                 output_name = "af_only.filtered.biallelic",
                 compress_output = compress_output,
                 gatk_docker = gatk_docker,
@@ -74,8 +74,8 @@ workflow CreateAFonlyVcf_from_File {
     if (create_multiallelic) {
         call MergeVCFs as MergeMultiallelicAFonlyVCFs {
             input:
-                input_vcfs = CreateAFonlyVcf.multiallelic_af_only_vcf,
-                input_vcf_indices = CreateAFonlyVcf.multiallelic_af_only_vcf_idx,
+                input_vcfs = select_all(CreateAFonlyVcf.multiallelic_af_only_vcf),
+                input_vcf_indices = select_all(CreateAFonlyVcf.multiallelic_af_only_vcf_idx),
                 output_name = "af_only.filtered.multiallelic",
                 compress_output = compress_output,
                 gatk_docker = gatk_docker,
