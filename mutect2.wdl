@@ -32,15 +32,15 @@ workflow Mutect2 {
         Boolean keep_germline = false  # not currently supported
         Boolean genotype_germline_sites = false  # use with care!
         Boolean genotype_pon_sites = false  # use with care!
-        Boolean native_pair_hmm_use_double_precision = true
-        Boolean use_linked_de_bruijn_graph = true
-        Boolean recover_all_dangling_branches = true
+        Boolean mutect2_native_pair_hmm_use_double_precision = true
+        Boolean mutect2_use_linked_de_bruijn_graph = true
+        Boolean mutect2_recover_all_dangling_branches = true
         Boolean funcotator_use_gnomad = true
 
         # expose extra arguments for import of this workflow
         String? split_intervals_extra_args
-        String? m2_extra_args
-        String? m2_filter_extra_args
+        String? mutect2_extra_args
+        String? filter_mutect2_extra_args
         String? select_variants_extra_args
         String? select_low_conficence_variants_jexl_arg = "'(vc.getAttribute(\"GERMQ\") < 30) || (vc.getAttribute(\"DP\") < 4) || (vc.getAttribute(\"MBQ\").0 == 0) || (vc.getAttribute(\"MFRL\").0 == 0)'"
         String? realignment_extra_args
@@ -56,6 +56,19 @@ workflow Mutect2 {
         File? bwa_mem_index_image
         File? funcotator_transcript_list
         File? funcotator_data_sources_tar_gz
+
+        # arguments
+        Int filter_mutect2_max_median_fragment_length_difference = 10000  # default: 10000
+        Int filter_mutect2_min_alt_median_base_quality = 20  # default: 20
+        Int filter_mutect2_min_alt_median_mapping_quality = 20  # default: -1
+        Int filter_alignment_artifacts_max_reasonable_fragment_length = 10000 # default: 100000
+        String funcotator_reference_version = "hg19"
+        String funcotator_output_format = "MAF"
+        String funcotator_variant_type = "somatic"  # alternative: germline
+        String funcotator_transcript_selection_mode = "CANONICAL"  # GATK default: "CANONICAL"
+        Array[String]? funcotator_annotation_defaults
+        Array[String]? funcotator_annotation_overrides
+        Array[String]? funcotator_exclude_fields
 
         # runtime
         Int scatter_count = 42
@@ -134,14 +147,14 @@ workflow Mutect2 {
             keep_germline = keep_germline,
             genotype_germline_sites = genotype_germline_sites,
             genotype_pon_sites = genotype_pon_sites,
-            native_pair_hmm_use_double_precision = native_pair_hmm_use_double_precision,
-            use_linked_de_bruijn_graph = use_linked_de_bruijn_graph,
-            recover_all_dangling_branches = recover_all_dangling_branches,
+            mutect2_native_pair_hmm_use_double_precision = mutect2_native_pair_hmm_use_double_precision,
+            mutect2_use_linked_de_bruijn_graph = mutect2_use_linked_de_bruijn_graph,
+            mutect2_recover_all_dangling_branches = mutect2_recover_all_dangling_branches,
             funcotator_use_gnomad = funcotator_use_gnomad,
 
             split_intervals_extra_args = split_intervals_extra_args,
-            m2_extra_args = m2_extra_args,
-            m2_filter_extra_args = m2_filter_extra_args,
+            mutect2_extra_args = mutect2_extra_args,
+            filter_mutect2_extra_args = filter_mutect2_extra_args,
             select_variants_extra_args = select_variants_extra_args,
             select_low_conficence_variants_jexl_arg = select_low_conficence_variants_jexl_arg,
             realignment_extra_args = realignment_extra_args,
@@ -156,6 +169,18 @@ workflow Mutect2 {
             bwa_mem_index_image = bwa_mem_index_image,
             funcotator_transcript_list = funcotator_transcript_list,
             funcotator_data_sources_tar_gz = funcotator_data_sources_tar_gz,
+
+            filter_mutect2_max_median_fragment_length_difference = filter_mutect2_max_median_fragment_length_difference,
+            filter_mutect2_min_alt_median_base_quality = filter_mutect2_min_alt_median_base_quality,
+            filter_mutect2_min_alt_median_mapping_quality = filter_mutect2_min_alt_median_mapping_quality,
+            filter_alignment_artifacts_max_reasonable_fragment_length = filter_alignment_artifacts_max_reasonable_fragment_length,
+            funcotator_reference_version = funcotator_reference_version,
+            funcotator_output_format = funcotator_output_format,
+            funcotator_variant_type = funcotator_variant_type,
+            funcotator_transcript_selection_mode = funcotator_transcript_selection_mode,
+            funcotator_annotation_defaults = funcotator_annotation_defaults,
+            funcotator_annotation_overrides = funcotator_annotation_overrides,
+            funcotator_exclude_fields = funcotator_exclude_fields,
 
             scatter_count = scatter_count,
             gatk_docker = gatk_docker,

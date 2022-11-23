@@ -144,15 +144,15 @@ workflow MultiSampleMutect2 {
         Boolean keep_germline = false  # not currently supported
         Boolean genotype_germline_sites = false  # use with care!
         Boolean genotype_pon_sites = false  # use with care!
-        Boolean native_pair_hmm_use_double_precision = true
-        Boolean use_linked_de_bruijn_graph = true
-        Boolean recover_all_dangling_branches = true
+        Boolean mutect2_native_pair_hmm_use_double_precision = true
+        Boolean mutect2_use_linked_de_bruijn_graph = true
+        Boolean mutect2_recover_all_dangling_branches = true
         Boolean funcotator_use_gnomad = true
 
         # expose extra arguments for import of this workflow
         String? split_intervals_extra_args
-        String? m2_extra_args
-        String? m2_filter_extra_args
+        String? mutect2_extra_args
+        String? filter_mutect2_extra_args
         String? select_variants_extra_args
         String? select_low_conficence_variants_jexl_arg = "'(vc.getAttribute(\"GERMQ\") < 30) || (vc.getAttribute(\"DP\") < 4) || (vc.getAttribute(\"MBQ\").0 == 0) || (vc.getAttribute(\"MFRL\").0 == 0)'"
         String? realignment_extra_args
@@ -169,12 +169,25 @@ workflow MultiSampleMutect2 {
         File? funcotator_transcript_list
         File? funcotator_data_sources_tar_gz
 
+        # arguments
+        Int filter_mutect2_max_median_fragment_length_difference = 10000  # default: 10000
+        Int filter_mutect2_min_alt_median_base_quality = 20  # default: 20
+        Int filter_mutect2_min_alt_median_mapping_quality = 20  # default: -1
+        Int filter_alignment_artifacts_max_reasonable_fragment_length = 10000 # default: 100000
+        String funcotator_reference_version = "hg19"
+        String funcotator_output_format = "MAF"
+        String funcotator_variant_type = "somatic"  # alternative: germline
+        String funcotator_transcript_selection_mode = "CANONICAL"  # GATK default: "CANONICAL"
+        Array[String]? funcotator_annotation_defaults
+        Array[String]? funcotator_annotation_overrides
+        Array[String]? funcotator_exclude_fields
+
         # runtime
         Int scatter_count = 42
         String gatk_docker = "broadinstitute/gatk"
         File? gatk_override
         Int preemptible = 1
-        Int max_retries = 2
+        Int max_retries = 1
         Int emergency_extra_diskGB = 0
 
         # memory assignments in MB
@@ -188,7 +201,7 @@ workflow MultiSampleMutect2 {
         Int calculate_contamination_mem = 3072  # depends on the variants_for_contamination resource
         Int filter_mutect_calls_mem = 4096
         Int select_variants_mem = 1024
-        Int filter_alignment_artifacts_mem = 2048  # needs to be increased of some cases
+        Int filter_alignment_artifacts_mem = 2048  # needs to be increased in some cases
         Int merge_vcfs_mem = 512
         Int merge_mutect_stats_mem = 512 # 64
         Int merge_bams_mem = 8192  # wants at least 6G
@@ -280,10 +293,10 @@ workflow MultiSampleMutect2 {
                 compress_output = compress_output,
                 genotype_germline_sites = genotype_germline_sites,
                 genotype_pon_sites = genotype_pon_sites,
-                native_pair_hmm_use_double_precision = native_pair_hmm_use_double_precision,
-                use_linked_de_bruijn_graph = use_linked_de_bruijn_graph,
-                recover_all_dangling_branches = recover_all_dangling_branches,
-                m2_extra_args = m2_extra_args,
+                native_pair_hmm_use_double_precision = mutect2_native_pair_hmm_use_double_precision,
+                use_linked_de_bruijn_graph = mutect2_use_linked_de_bruijn_graph,
+                recover_all_dangling_branches = mutect2_recover_all_dangling_branches,
+                m2_extra_args = mutect2_extra_args,
                 gatk_docker = gatk_docker,
                 gatk_override = gatk_override,
                 memoryMB = variant_call_base_mem + num_bams * additional_per_sample_mem,
@@ -409,8 +422,11 @@ workflow MultiSampleMutect2 {
                 contamination_tables = CalculateContamination.contamination_table,
                 tumor_segmentation = CalculateContamination.tumor_segmentation,
                 mutect_stats = MergeMutectStats.merged_stats,
+                max_median_fragment_length_difference = filter_mutect2_max_median_fragment_length_difference,
+                min_alt_median_base_quality = filter_mutect2_min_alt_median_base_quality,
+                min_alt_median_mapping_quality = filter_mutect2_min_alt_median_mapping_quality,
                 compress_output = compress_output,
-                m2_filter_extra_args = m2_filter_extra_args,
+                m2_filter_extra_args = filter_mutect2_extra_args,
                 runtime_params = standard_runtime,
                 memoryMB = filter_mutect_calls_mem,
         }
@@ -495,6 +511,7 @@ workflow MultiSampleMutect2 {
                         input_vcf_idx = SelectPreRealignmentVariants.selected_vcf_idx,
                         bwa_mem_index_image = bwa_mem_index_image,
                         compress_output = compress_output,
+                        max_reasonable_fragment_length = filter_alignment_artifacts_max_reasonable_fragment_length,
                         realignment_extra_args = realignment_extra_args,
                         runtime_params = standard_runtime,
                         memoryMB = filter_alignment_artifacts_mem + num_bams * additional_per_sample_mem,
@@ -668,6 +685,13 @@ workflow MultiSampleMutect2 {
                         data_sources_tar_gz = funcotator_data_sources_tar_gz,
                         use_gnomad = funcotator_use_gnomad,
                         compress_output = compress_output,
+                        reference_version = funcotator_reference_version,
+                        output_format = funcotator_output_format,
+                        variant_type = funcotator_variant_type,
+                        transcript_selection_mode = funcotator_transcript_selection_mode,
+                        annotation_defaults = funcotator_annotation_defaults,
+                        annotation_overrides = funcotator_annotation_overrides,
+                        exclude_fields = funcotator_exclude_fields,
                         funcotate_extra_args = funcotate_extra_args,
                         runtime_params = standard_runtime,
                         memoryMB = funcotate_mem
@@ -811,8 +835,8 @@ task VariantCall {
         Boolean genotype_germline_sites = false
         Boolean genotype_pon_sites = false
         Boolean native_pair_hmm_use_double_precision = false
-        Boolean use_linked_de_bruijn_graph = false
-        Boolean recover_all_dangling_branches = false
+        Boolean use_linked_de_bruijn_graph = true
+        Boolean recover_all_dangling_branches = true
 
         String? m2_extra_args
 
@@ -1750,16 +1774,11 @@ task Funcotate {
             ~{true="--annotation-override " false="" defined(annotation_overrides)}~{default="" sep=" --annotation-override " annotation_overrides} \
             ~{true="--exclude-field " false="" defined(exclude_fields)}~{default="" sep=" --exclude-field " exclude_fields} \
             ~{funcotate_extra_args}
-
-        # Make sure we have a placeholder index for MAF files so this workflow doesn't fail:
-        if [[ "~{output_format}" == "MAF" ]] ; then
-            touch '~{output_maf_index}'
-        fi
     >>>
 
     output {
         File funcotated_output_file = output_file
-        File funcotated_output_file_index = output_file_index
+        File? funcotated_output_file_index = output_file_index
     }
 
     runtime {
