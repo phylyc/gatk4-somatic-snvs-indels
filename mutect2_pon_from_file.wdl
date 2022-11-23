@@ -31,7 +31,7 @@ workflow Mutect2_Panel_from_File {
         File germline_resource_idx
 
         Boolean compress_output = true
-        String m2_extra_args = ""
+        String mutect2_extra_args = ""
         String pon_name
 
         Int min_contig_size = 1000000
@@ -62,7 +62,7 @@ workflow Mutect2_Panel_from_File {
             germline_resource_idx = germline_resource_idx,
 
             compress_output = compress_output,
-            m2_extra_args = m2_extra_args,
+            mutect2_extra_args = mutect2_extra_args,
             pon_name = pon_name,
 
             min_contig_size = min_contig_size,

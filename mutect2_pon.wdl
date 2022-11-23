@@ -29,7 +29,7 @@ workflow Mutect2_Panel {
         File germline_resource_idx
 
         Boolean compress_output = true
-        String m2_extra_args = ""
+        String mutect2_extra_args = ""
         String pon_name
 
         Int min_contig_size = 1000000
@@ -85,12 +85,7 @@ workflow Mutect2_Panel {
                 run_funcotator = false,
                 compress_output = compress_output,
                 scatter_count = scatter_count,
-                genotype_germline_sites = false,
-                genotype_pon_sites = false,
-                native_pair_hmm_use_double_precision = true,
-                use_linked_de_bruijn_graph = true,
-                recover_all_dangling_branches = true,
-                m2_extra_args = m2_extra_args + " --max-mnp-distance 0",
+                mutect2_extra_args = mutect2_extra_args + " --max-mnp-distance 0",
                 gatk_override = gatk_override,
                 gatk_docker = gatk_docker,
                 preemptible = preemptible,

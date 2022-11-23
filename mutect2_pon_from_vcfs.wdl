@@ -31,7 +31,6 @@ workflow Mutect2_Panel_from_VCFs {
         File germline_resource_idx
 
         Boolean compress_output = true
-        String m2_extra_args = ""
         String pon_name
 
         Int min_contig_size = 1000000
