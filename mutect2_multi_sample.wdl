@@ -128,6 +128,8 @@ workflow MultiSampleMutect2 {
         Array[File]+ tumor_bais
         Array[File]? normal_bams
         Array[File]? normal_bais
+        Array[String]? tumor_sample_ids
+        Array[String]? normal_sample_ids
 
         # workflow options
         Boolean run_contamination_model = true
@@ -198,7 +200,7 @@ workflow MultiSampleMutect2 {
         Int learn_read_orientation_model_base_mem = 6144
         Int get_pileup_summaries_mem = 2048  # needs at least 2G
         Int gather_pileup_summaries_mem = 512  # 64
-        Int calculate_contamination_mem = 3072  # depends on the variants_for_contamination resource
+        Int calculate_contamination_mem = 8192  # depends on the variants_for_contamination resource
         Int filter_mutect_calls_mem = 4096
         Int select_variants_mem = 1024
         Int filter_alignment_artifacts_mem = 2048  # needs to be increased in some cases
@@ -206,7 +208,7 @@ workflow MultiSampleMutect2 {
         Int merge_mutect_stats_mem = 512 # 64
         Int merge_bams_mem = 8192  # wants at least 6G
         Int cnn_scoring_mem = 4096
-        Int funcotate_mem = 3072
+        Int funcotate_mem = 4096
 
         # Increasing cpus likely increases costs by the same factor.
         Int variant_call_cpu = 1  # good for PairHMM: 2
@@ -1706,7 +1708,7 @@ task Funcotate {
     String output_file_index = if output_format == "MAF" then output_maf_index else output_vcf_idx
 
     # Calculate disk size:
-    Int funco_tar_sizeGB = if defined(data_sources_tar_gz) then 3 * ceil(size(data_sources_tar_gz, "GB")) else 100
+    Int funco_tar_sizeGB = if defined(data_sources_tar_gz) then 4 * ceil(size(data_sources_tar_gz, "GB")) else 100
     Int diskGB = funco_tar_sizeGB + select_first([disk_spaceGB, runtime_params.disk])
 
     String dollar = "$"
