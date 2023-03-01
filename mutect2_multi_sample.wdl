@@ -131,6 +131,17 @@ workflow MultiSampleMutect2 {
         Array[String]? tumor_sample_ids
         Array[String]? normal_sample_ids
 
+        # resources
+        File? panel_of_normals
+        File? panel_of_normals_idx
+        File? germline_resource
+        File? germline_resource_tbi
+        File? variants_for_contamination
+        File? variants_for_contamination_idx
+        File? bwa_mem_index_image
+        File? funcotator_transcript_list
+        File? funcotator_data_sources_tar_gz
+
         # workflow options
         Boolean run_contamination_model = true
         Boolean run_orientation_bias_mixture_model = true
@@ -146,10 +157,25 @@ workflow MultiSampleMutect2 {
         Boolean keep_germline = false  # not currently supported
         Boolean genotype_germline_sites = false  # use with care!
         Boolean genotype_pon_sites = false  # use with care!
+
+        # arguments
         Boolean mutect2_native_pair_hmm_use_double_precision = true
         Boolean mutect2_use_linked_de_bruijn_graph = true
         Boolean mutect2_recover_all_dangling_branches = true
+        Int mutect2_downstampling_stride = 1
+        Int mutect2_max_reads_per_alignment_start = 50
+        Int filter_mutect2_max_median_fragment_length_difference = 10000  # default: 10000
+        Int filter_mutect2_min_alt_median_base_quality = 20  # default: 20
+        Int filter_mutect2_min_alt_median_mapping_quality = 20  # default: -1
+        Int filter_alignment_artifacts_max_reasonable_fragment_length = 10000 # default: 100000
+        String funcotator_reference_version = "hg19"
+        String funcotator_output_format = "MAF"
+        String funcotator_variant_type = "somatic"  # alternative: germline
+        String funcotator_transcript_selection_mode = "CANONICAL"  # GATK default: "CANONICAL"
         Boolean funcotator_use_gnomad = true
+        Array[String]? funcotator_annotation_defaults
+        Array[String]? funcotator_annotation_overrides
+        Array[String]? funcotator_exclude_fields
 
         # expose extra arguments for import of this workflow
         String? split_intervals_extra_args
@@ -160,32 +186,8 @@ workflow MultiSampleMutect2 {
         String? realignment_extra_args
         String? funcotate_extra_args
 
-        # resources
-        File? panel_of_normals
-        File? panel_of_normals_idx
-        File? germline_resource
-        File? germline_resource_tbi
-        File? variants_for_contamination
-        File? variants_for_contamination_idx
-        File? bwa_mem_index_image
-        File? funcotator_transcript_list
-        File? funcotator_data_sources_tar_gz
-
-        # arguments
-        Int filter_mutect2_max_median_fragment_length_difference = 10000  # default: 10000
-        Int filter_mutect2_min_alt_median_base_quality = 20  # default: 20
-        Int filter_mutect2_min_alt_median_mapping_quality = 20  # default: -1
-        Int filter_alignment_artifacts_max_reasonable_fragment_length = 10000 # default: 100000
-        String funcotator_reference_version = "hg19"
-        String funcotator_output_format = "MAF"
-        String funcotator_variant_type = "somatic"  # alternative: germline
-        String funcotator_transcript_selection_mode = "CANONICAL"  # GATK default: "CANONICAL"
-        Array[String]? funcotator_annotation_defaults
-        Array[String]? funcotator_annotation_overrides
-        Array[String]? funcotator_exclude_fields
-
         # runtime
-        Int scatter_count = 42
+        Int scatter_count = 10
         String gatk_docker = "broadinstitute/gatk"
         File? gatk_override
         Int preemptible = 1
@@ -836,9 +838,16 @@ task VariantCall {
 
         Boolean genotype_germline_sites = false
         Boolean genotype_pon_sites = false
-        Boolean native_pair_hmm_use_double_precision = false
+        Boolean native_pair_hmm_use_double_precision = true
         Boolean use_linked_de_bruijn_graph = true
         Boolean recover_all_dangling_branches = true
+
+        # The linked de-Bruijn graph implementation has trouble calling variants
+        # in complex regions. Reducing the downsampling by increasing the following
+        # parameters might solve the issue. It increases compute cost though.
+        Int downsampling_stride = 1
+        Int max_reads_per_alignment_start = 50
+        String emit_ref_confidence = "BP_RESOLUTION"
 
         String? m2_extra_args
 
@@ -906,10 +915,14 @@ task VariantCall {
             ~{true="--genotype-pon-sites true" false="" genotype_pon_sites} \
             ~{true="--linked-de-bruijn-graph true" false="" use_linked_de_bruijn_graph} \
             ~{true="--recover-all-dangling-branches true" false="" recover_all_dangling_branches} \
+            --pileup-detection true \
             --smith-waterman FASTEST_AVAILABLE \
             --pair-hmm-implementation FASTEST_AVAILABLE \
             ~{"--native-pair-hmm-threads " + native_hmm_pair_threads} \
             ~{true="--native-pair-hmm-use-double-precision true" false="" native_pair_hmm_use_double_precision} \
+            ~{"--downsampling-stride " + downsampling_stride} \
+            ~{"--max-reads-per-alignment-start " + max_reads_per_alignment_start} \
+            ~{"--emit-ref-confidence " + emit_ref_confidence} \
             --seconds-between-progress-updates 300 \
             ~{m2_extra_args}
     >>>
