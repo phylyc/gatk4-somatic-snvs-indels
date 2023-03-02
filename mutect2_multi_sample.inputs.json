@@ -43,5 +43,6 @@
   "MultiSampleMutect2.mutect2_max_reads_per_alignment_start":"${0}",
   "MultiSampleMutect2.filter_mutect2_max_median_fragment_length_difference":"${1000}",
   "MultiSampleMutect2.filter_alignment_artifacts_max_reasonable_fragment_length":"${1000}",
-  "MultiSampleMutect2.funcotator_reference_version":"${\"hg19\"}"
+  "MultiSampleMutect2.funcotator_reference_version":"${\"hg19\"}",
+  "MultiSampleMutect2.gatk_docker":"${\"broadinstitute/gatk:4.3.0.0\"}"
 }

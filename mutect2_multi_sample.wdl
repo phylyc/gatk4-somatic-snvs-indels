@@ -212,22 +212,23 @@ workflow MultiSampleMutect2 {
         Int mem_cnn_scoring = 4096
         Int mem_funcotate = 4096
         
-        # compute time assignments in seconds
-        Int time_split_intervals = 600  # 10 min
-        Int time_get_sample_name = 600  # 10 min
-        Int time_variant_call_base = ceil(500000 / scatter_count)  # 6 d / scatter
-        Int time_learn_read_orientation_model_base = 10800  # 3 h
-        Int time_get_pileup_summaries = 5400  # 1.5 h
-        Int time_gather_pileup_summaries = 600  # 10 min
-        Int time_calculate_contamination = 3600  # 1 h
-        Int time_filter_mutect_calls = 28800  # 8 h
-        Int time_select_variants = 600  # 10 min
-        Int time_filter_alignment_artifacts = ceil(1000000 / scatter_count)  # 12 d / scatter
-        Int time_merge_vcfs = 600  # 10 min
-        Int time_merge_mutect_stats = 600  # 10 min
-        Int time_merge_bams = 3600  # 1 h
-        Int time_cnn_scoring = 3600  # 1 h
-        Int time_funcotate = 28800  # 8 h
+        # runtime assignments in minutes (for HPC cluster)
+        Int time_startup = 10
+        Int time_split_intervals = 1
+        Int time_get_sample_name = 1
+        Int timr_variant_call = ceil(10000 / scatter_count)  # 6 d / scatter
+        Int time_learn_read_orientation_model = 180  # 3 h
+        Int time_get_pileup_summaries = 90  # 1.5 h
+        Int time_gather_pileup_summaries = 5
+        Int time_calculate_contamination = 10
+        Int time_filter_mutect_calls = 800  # 13 h
+        Int time_select_variants = 5
+        Int time_filter_alignment_artifacts = ceil(10000 / scatter_count)  # 12 d / scatter
+        Int time_merge_vcfs = 10
+        Int time_merge_mutect_stats = 1
+        Int time_merge_bams = 60
+        Int time_cnn_scoring = 10
+        Int time_funcotate = 500  # 8 h
 
         # Increasing cpus likely increases costs by the same factor.
         Int variant_call_cpu = 1  # good for PairHMM: 2
@@ -278,7 +279,8 @@ workflow MultiSampleMutect2 {
             scatter_count = scatter_count,
             split_intervals_extra_args = split_intervals_extra_args,
             runtime_params = standard_runtime,
-            memoryMB = mem_split_intervals
+            memoryMB = mem_split_intervals,
+            runtime_minutes = time_startup + time_split_intervals
     }
 
     if (normal_is_present) {
@@ -287,7 +289,8 @@ workflow MultiSampleMutect2 {
                 input:
                     bam = normal_bam,
                     runtime_params = standard_runtime,
-                    memoryMB = mem_get_sample_name
+                    memoryMB = mem_get_sample_name,
+                    runtime_minutes = time_startup + time_get_sample_name
             }
         }
     }
@@ -322,7 +325,8 @@ workflow MultiSampleMutect2 {
                 m2_extra_args = mutect2_extra_args,
                 gatk_docker = gatk_docker,
                 gatk_override = gatk_override,
-                memoryMB = mem_variant_call_base + num_bams * mem_additional_per_sample,
+                memoryMB = mem_variant_call_base + num_bams * mem_additional_per_sample,,
+                runtime_minutes = time_startup + timr_variant_call
                 cpu = variant_call_cpu,
                 disk_spaceGB = m2_per_scatter_size,
 		}
@@ -335,7 +339,8 @@ workflow MultiSampleMutect2 {
             output_name = individual_id + ".unfiltered.merged",
             compress_output = compress_output,
             runtime_params = standard_runtime,
-            memoryMB = mem_merge_vcfs
+            memoryMB = mem_merge_vcfs,
+            runtime_minutes = time_startup + time_merge_vcfs
     }
 
     call MergeMutectStats {
@@ -343,7 +348,8 @@ workflow MultiSampleMutect2 {
             stats = VariantCall.vcf_stats,
             individual_id = individual_id,
             runtime_params = standard_runtime,
-            memoryMB = mem_merge_mutect_stats
+            memoryMB = mem_merge_mutect_stats,
+            runtime_minutes = time_startup + time_merge_mutect_stats
     }
 
     if (run_contamination_model) {
@@ -357,7 +363,8 @@ workflow MultiSampleMutect2 {
                         variants_for_contamination = variants_for_contamination,
                         variants_for_contamination_idx = variants_for_contamination_idx,
                         runtime_params = standard_runtime,
-                        memoryMB = mem_get_pileup_summaries
+                        memoryMB = mem_get_pileup_summaries,
+                        runtime_minutes = time_startup + time_get_pileup_summaries
                 }
             }
 
@@ -367,7 +374,8 @@ workflow MultiSampleMutect2 {
                     ref_dict = ref_dict,
                     output_name = basename(tumor_sample.left, ".bam") + ".pileup",
                     runtime_params = standard_runtime,
-                    memoryMB = mem_gather_pileup_summaries
+                    memoryMB = mem_gather_pileup_summaries,
+                    runtime_minutes = time_startup + time_gather_pileup_summaries
             }
         }
 
@@ -393,7 +401,8 @@ workflow MultiSampleMutect2 {
                         variants_for_contamination = variants_for_contamination,
                         variants_for_contamination_idx = variants_for_contamination_idx,
                         runtime_params = standard_runtime,
-                        memoryMB = mem_get_pileup_summaries
+                        memoryMB = mem_get_pileup_summaries,
+                        runtime_minutes = time_startup + time_get_pileup_summaries
                 }
             }
 
@@ -403,7 +412,8 @@ workflow MultiSampleMutect2 {
                     ref_dict = ref_dict,
                     output_name = basename(best_normal_bam, ".bam") + ".pileup",
                     runtime_params = standard_runtime,
-                    memoryMB = mem_gather_pileup_summaries
+                    memoryMB = mem_gather_pileup_summaries,
+                    runtime_minutes = time_startup + time_gather_pileup_summaries
             }
         }
 
@@ -413,7 +423,8 @@ workflow MultiSampleMutect2 {
                     tumor_pileups = tumor_pileups,
                     normal_pileups = GatherNormalPileupSummaries.merged_pileup_summaries,
                     runtime_params = standard_runtime,
-                    memoryMB = mem_calculate_contamination
+                    memoryMB = mem_calculate_contamination,
+                    runtime_minutes = time_startup + time_calculate_contamination
             }
         }
     }
@@ -424,7 +435,8 @@ workflow MultiSampleMutect2 {
                 individual_id = individual_id,
                 f1r2_counts = select_all(VariantCall.m2_artifact_priors),
                 runtime_params = standard_runtime,
-                memoryMB = mem_learn_read_orientation_model_base + num_bams * mem_additional_per_sample
+                memoryMB = mem_learn_read_orientation_model_base + num_bams * mem_additional_per_sample,
+                runtime_minutes = time_startup + time_learn_read_orientation_model
         }
     }
 
@@ -452,6 +464,7 @@ workflow MultiSampleMutect2 {
                 m2_filter_extra_args = filter_mutect2_extra_args,
                 runtime_params = standard_runtime,
                 memoryMB = mem_filter_mutect_calls,
+                runtime_minutes = time_startup + time_filter_mutect_calls
         }
 
         call SelectVariants as SelectPassingVariants {
@@ -463,7 +476,8 @@ workflow MultiSampleMutect2 {
                 compress_output = compress_output,
                 select_variants_extra_args = select_variants_extra_args,
                 runtime_params = standard_runtime,
-                memoryMB = mem_select_variants
+                memoryMB = mem_select_variants,
+                runtime_minutes = time_startup + time_select_variants
         }
 
         if (run_realignment_filter) {
@@ -483,7 +497,8 @@ workflow MultiSampleMutect2 {
                         compress_output = compress_output,
                         select_variants_extra_args = "-select " + select_low_conficence_variants_jexl_arg,
                         runtime_params = standard_runtime,
-                        memoryMB = mem_select_variants
+                        memoryMB = mem_select_variants,
+                        runtime_minutes = time_startup + time_select_variants
                 }
 
                 call SelectVariants as SelectHighConfidenceVariants {
@@ -493,7 +508,8 @@ workflow MultiSampleMutect2 {
                         compress_output = compress_output,
                         select_variants_extra_args = "-select " + select_low_conficence_variants_jexl_arg + " -invertSelect true",
                         runtime_params = standard_runtime,
-                        memoryMB = mem_select_variants
+                        memoryMB = mem_select_variants,
+                        runtime_minutes = time_startup + time_select_variants
                 }
             }
 
@@ -518,7 +534,8 @@ workflow MultiSampleMutect2 {
                         filtered_vcf_idx = variants_to_realign_idx,
                         compress_output = compress_output,
                         runtime_params = standard_runtime,
-                        memoryMB = mem_select_variants
+                        memoryMB = mem_select_variants,
+                        runtime_minutes = time_startup + time_select_variants
                 }
 
                 call FilterAlignmentArtifacts {
@@ -536,6 +553,7 @@ workflow MultiSampleMutect2 {
                         realignment_extra_args = realignment_extra_args,
                         runtime_params = standard_runtime,
                         memoryMB = mem_filter_alignment_artifacts + num_bams * mem_additional_per_sample,
+                        runtime_minutes = time_startup + time_filter_alignment_artifacts,
                         cpu = filter_alignment_artifacts_cpu
                 }
             }
@@ -547,7 +565,8 @@ workflow MultiSampleMutect2 {
                     output_name = individual_id + ".filtered.selected.realignmentfiltered",
                     compress_output = compress_output,
                     runtime_params = standard_runtime,
-                    memoryMB = mem_merge_vcfs
+                    memoryMB = mem_merge_vcfs,
+                    runtime_minutes = time_startup + time_merge_vcfs
             }
 
             call SelectVariants as SelectPostRealignmentVariants {
@@ -559,7 +578,8 @@ workflow MultiSampleMutect2 {
                     compress_output = compress_output,
                     select_variants_extra_args = select_variants_extra_args,
                     runtime_params = standard_runtime,
-                    memoryMB = mem_select_variants
+                    memoryMB = mem_select_variants,
+                    runtime_minutes = time_startup + time_select_variants
             }
 
             if (run_realignment_filter_only_on_high_confidence_variants) {
@@ -576,7 +596,8 @@ workflow MultiSampleMutect2 {
                         output_name = individual_id + ".filtered.selected.realignmentfiltered.selected.merged",
                         compress_output = compress_output,
                         runtime_params = standard_runtime,
-                        memoryMB = mem_merge_vcfs
+                        memoryMB = mem_merge_vcfs,
+                        runtime_minutes = time_startup + time_merge_vcfs
                 }
             }
 
@@ -613,7 +634,8 @@ workflow MultiSampleMutect2 {
                 m2_bam_outs = select_all(VariantCall.bamout),
                 output_vcf_name = vcf_name,
                 runtime_params = standard_runtime,
-                memoryMB = mem_merge_bams
+                memoryMB = mem_merge_bams,
+                runtime_minutes = time_startup + time_merge_bams
         }
     }
 
@@ -632,7 +654,8 @@ workflow MultiSampleMutect2 {
                 input:
                     bam = tumor_bam,
                     runtime_params = standard_runtime,
-                    memoryMB = mem_get_sample_name
+                    memoryMB = mem_get_sample_name,
+                    runtime_minutes = time_startup + time_get_sample_name
             }
             # We select the first normal sample to be the matched normal.
             # todo: select normal with greatest sequencing depth
@@ -658,7 +681,8 @@ workflow MultiSampleMutect2 {
                     compress_output = compress_output,
                     select_variants_extra_args = select_variants_extra_args,
                     runtime_params = standard_runtime,
-                    memoryMB = mem_select_variants
+                    memoryMB = mem_select_variants,
+                    runtime_minutes = time_startup + time_select_variants
             }
 
             # CNNScoreVariants is very unreliable in its execution. It's probably
@@ -677,6 +701,7 @@ workflow MultiSampleMutect2 {
                         compress_output = compress_output,
                         runtime_params = standard_runtime,
                         memoryMB = mem_cnn_scoring,
+                        runtime_minutes = time_startup + time_cnn_scoring,
                         cpu = cnn_scoring_cpu
                 }
             }
@@ -706,7 +731,8 @@ workflow MultiSampleMutect2 {
                         exclude_fields = funcotator_exclude_fields,
                         funcotate_extra_args = funcotate_extra_args,
                         runtime_params = standard_runtime,
-                        memoryMB = mem_funcotate
+                        memoryMB = mem_funcotate,
+                        runtime_minutes = time_startup + time_funcotate
                 }
             }
         }
@@ -742,6 +768,7 @@ task SplitIntervals {
 
         Runtime runtime_params
         Int? memoryMB = 64
+        Int? runtime_minutes = 60
     }
 
     String extra_args = (
@@ -771,6 +798,7 @@ task SplitIntervals {
             -O interval-files \
             ~{extra_args}
         cp interval-files/*.interval_list .
+        rm -r interval-files
     >>>
 
     output {
@@ -781,6 +809,7 @@ task SplitIntervals {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + runtime_params.disk + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -794,6 +823,7 @@ task GetSampleName {
 
         Runtime runtime_params
         Int? memoryMB = 256
+        Int? runtime_minutes = 60
     }
 
     parameter_meta {
@@ -818,6 +848,7 @@ task GetSampleName {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + runtime_params.disk + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -868,6 +899,7 @@ task VariantCall {
         Int max_retries = 2
         Int cpu = 2  # to have 4 native_hmm_pair_threads
         Int memoryMB = 8192
+        Int? runtime_minutes = 60
         Int disk_spaceGB = 100
         Int boot_disk_size_GB = 12  # must be > 10
     }
@@ -946,6 +978,7 @@ task VariantCall {
         docker: gatk_docker
         bootDiskSizeGb: boot_disk_size_GB
         memory: memoryMB + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + disk_space + " HDD"
         preemptible: preemptible
         maxRetries: max_retries
@@ -960,6 +993,7 @@ task MergeMutectStats {
 
         Runtime runtime_params
         Int? memoryMB = 256
+        Int? runtime_minutes = 60
     }
 
     # Optional localization leads to cromwell error.
@@ -986,6 +1020,7 @@ task MergeMutectStats {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + runtime_params.disk + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1010,6 +1045,7 @@ task LearnReadOrientationModel {
 
         Runtime runtime_params
         Int? memoryMB = 8192
+        Int? runtime_minutes = 60
     }
 
     # Optional localization leads to cromwell error.
@@ -1045,6 +1081,7 @@ task LearnReadOrientationModel {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + disk_size + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1069,6 +1106,7 @@ task GetPileupSummaries {
 
         Runtime runtime_params
         Int? memoryMB = 2048
+        Int? runtime_minutes = 60
         Int? disk_spaceGB
 	}
 
@@ -1114,6 +1152,7 @@ task GetPileupSummaries {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + select_first([disk_spaceGB, runtime_params.disk]) + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1129,6 +1168,7 @@ task GatherPileupSummaries {
 
         Runtime runtime_params
         Int? memoryMB = 64
+        Int? runtime_minutes = 60
     }
 
     # Optional localization leads to cromwell error.
@@ -1155,6 +1195,7 @@ task GatherPileupSummaries {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + runtime_params.disk + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1177,6 +1218,7 @@ task CalculateContamination {
 
         Runtime runtime_params
         Int? memoryMB = 512
+        Int? runtime_minutes = 60
     }
 
     # Optional localization leads to cromwell error.
@@ -1210,6 +1252,7 @@ task CalculateContamination {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + runtime_params.disk + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1241,6 +1284,7 @@ task FilterMutectCalls {
 
         Runtime runtime_params
         Int? memoryMB = 4096
+        Int? runtime_minutes = 60
     }
 
     # Optional localization leads to cromwell error.
@@ -1299,6 +1343,7 @@ task FilterMutectCalls {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + disk_spaceGB + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1329,6 +1374,7 @@ task FilterAlignmentArtifacts {
         Runtime runtime_params
         String? gatk_docker
         Int? memoryMB = 4096
+        Int? runtime_minutes = 60
         Int? cpu = 2  # wants 4
     }
 
@@ -1381,6 +1427,7 @@ task FilterAlignmentArtifacts {
         docker: select_first([gatk_docker, runtime_params.gatk_docker])
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + disk_spaceGB + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1408,6 +1455,7 @@ task SelectVariants {
 
         Runtime runtime_params
         Int? memoryMB = 512
+        Int? runtime_minutes = 60
     }
 
     parameter_meta {
@@ -1489,6 +1537,7 @@ task SelectVariants {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + runtime_params.disk + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1507,6 +1556,7 @@ task MergeVCFs {
 
         Runtime runtime_params
         Int? memoryMB = 512
+        Int? runtime_minutes = 60
     }
 
     # Optional localization leads to cromwell error.
@@ -1536,6 +1586,7 @@ task MergeVCFs {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + runtime_params.disk + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1553,6 +1604,7 @@ task MergeBamOuts {
 
         Runtime runtime_params
         Int? memoryMB = 6144
+        Int? runtime_minutes = 60
         Boolean use_ssd = false
     }
 
@@ -1599,6 +1651,7 @@ task MergeBamOuts {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + disk_spaceGB + if use_ssd then " SSD" else " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1626,6 +1679,7 @@ task CNNScoreVariants {
         Runtime runtime_params
         String? gatk_docker
         Int? memoryMB = 4096
+        Int? runtime_minutes = 60
         Int? cpu = 1  # wants 4
     }
 
@@ -1667,6 +1721,7 @@ task CNNScoreVariants {
         docker: select_first([gatk_docker, runtime_params.gatk_docker])
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + disk_spaceGB + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1703,6 +1758,7 @@ task Funcotate {
 
         Runtime runtime_params
         Int? memoryMB = 4096
+        Int? runtime_minutes = 60
         Int? disk_spaceGB
         Boolean use_ssd = false
     }
@@ -1806,6 +1862,7 @@ task Funcotate {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: runtime_minutes
         disks: "local-disk " + diskGB + if use_ssd then " SSD" else " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
