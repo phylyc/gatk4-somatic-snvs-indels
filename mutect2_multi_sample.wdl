@@ -148,7 +148,7 @@ workflow MultiSampleMutect2 {
         Boolean run_variant_filter = true
         Boolean run_realignment_filter = true
         Boolean run_realignment_filter_only_on_high_confidence_variants = false
-        Boolean run_cnn_scoring_model = false  # probably leads to failure if true
+        Boolean run_cnn_scoring_model = false  # likely leads to failure if true; better performance with make_bamout = true
         Boolean run_funcotator = true
 
         Boolean compress_output = true
@@ -188,29 +188,46 @@ workflow MultiSampleMutect2 {
 
         # runtime
         Int scatter_count = 10
-        String gatk_docker = "broadinstitute/gatk"
+        String gatk_docker = "broadinstitute/gatk:4.3.0.0"
         File? gatk_override
         Int preemptible = 1
         Int max_retries = 1
         Int emergency_extra_diskGB = 0
 
         # memory assignments in MB
-        Int additional_per_sample_mem = 256  # this actually can depend on bam size (WES vs WGS)
-        Int split_intervals_mem = 512  # 64
-        Int get_sample_name_mem = 512
-        Int variant_call_base_mem = 4096
-        Int learn_read_orientation_model_base_mem = 6144
-        Int get_pileup_summaries_mem = 2048  # needs at least 2G
-        Int gather_pileup_summaries_mem = 512  # 64
-        Int calculate_contamination_mem = 8192  # depends on the variants_for_contamination resource
-        Int filter_mutect_calls_mem = 4096
-        Int select_variants_mem = 1024
-        Int filter_alignment_artifacts_mem = 2048  # needs to be increased in some cases
-        Int merge_vcfs_mem = 512
-        Int merge_mutect_stats_mem = 512 # 64
-        Int merge_bams_mem = 8192  # wants at least 6G
-        Int cnn_scoring_mem = 4096
-        Int funcotate_mem = 4096
+        Int mem_additional_per_sample = 256  # this actually can depend on bam size (WES vs WGS)
+        Int mem_split_intervals = 512  # 64
+        Int mem_get_sample_name = 512
+        Int mem_variant_call_base = 4096
+        Int mem_learn_read_orientation_model_base = 6144
+        Int mem_get_pileup_summaries = 2048  # needs at least 2G
+        Int mem_gather_pileup_summaries = 512  # 64
+        Int mem_calculate_contamination = 8192  # depends on the variants_for_contamination resource
+        Int mem_filter_mutect_calls = 4096
+        Int mem_select_variants = 1024
+        Int mem_filter_alignment_artifacts = 2048  # needs to be increased in some cases
+        Int mem_merge_vcfs = 512
+        Int mem_merge_mutect_stats = 512 # 64
+        Int mem_merge_bams = 8192  # wants at least 6G
+        Int mem_cnn_scoring = 4096
+        Int mem_funcotate = 4096
+        
+        # compute time assignments in seconds
+        Int time_split_intervals = 600  # 10 min
+        Int time_get_sample_name = 600  # 10 min
+        Int time_variant_call_base = ceil(500000 / scatter_count)  # 6 d / scatter
+        Int time_learn_read_orientation_model_base = 10800  # 3 h
+        Int time_get_pileup_summaries = 5400  # 1.5 h
+        Int time_gather_pileup_summaries = 600  # 10 min
+        Int time_calculate_contamination = 3600  # 1 h
+        Int time_filter_mutect_calls = 28800  # 8 h
+        Int time_select_variants = 600  # 10 min
+        Int time_filter_alignment_artifacts = ceil(1000000 / scatter_count)  # 12 d / scatter
+        Int time_merge_vcfs = 600  # 10 min
+        Int time_merge_mutect_stats = 600  # 10 min
+        Int time_merge_bams = 3600  # 1 h
+        Int time_cnn_scoring = 3600  # 1 h
+        Int time_funcotate = 28800  # 8 h
 
         # Increasing cpus likely increases costs by the same factor.
         Int variant_call_cpu = 1  # good for PairHMM: 2
@@ -261,7 +278,7 @@ workflow MultiSampleMutect2 {
             scatter_count = scatter_count,
             split_intervals_extra_args = split_intervals_extra_args,
             runtime_params = standard_runtime,
-            memoryMB = split_intervals_mem
+            memoryMB = mem_split_intervals
     }
 
     if (normal_is_present) {
@@ -270,7 +287,7 @@ workflow MultiSampleMutect2 {
                 input:
                     bam = normal_bam,
                     runtime_params = standard_runtime,
-                    memoryMB = get_sample_name_mem
+                    memoryMB = mem_get_sample_name
             }
         }
     }
@@ -300,10 +317,12 @@ workflow MultiSampleMutect2 {
                 native_pair_hmm_use_double_precision = mutect2_native_pair_hmm_use_double_precision,
                 use_linked_de_bruijn_graph = mutect2_use_linked_de_bruijn_graph,
                 recover_all_dangling_branches = mutect2_recover_all_dangling_branches,
+                downsampling_stride = mutect2_downstampling_stride,
+                max_reads_per_alignment_start = mutect2_max_reads_per_alignment_start,
                 m2_extra_args = mutect2_extra_args,
                 gatk_docker = gatk_docker,
                 gatk_override = gatk_override,
-                memoryMB = variant_call_base_mem + num_bams * additional_per_sample_mem,
+                memoryMB = mem_variant_call_base + num_bams * mem_additional_per_sample,
                 cpu = variant_call_cpu,
                 disk_spaceGB = m2_per_scatter_size,
 		}
@@ -316,7 +335,7 @@ workflow MultiSampleMutect2 {
             output_name = individual_id + ".unfiltered.merged",
             compress_output = compress_output,
             runtime_params = standard_runtime,
-            memoryMB = merge_vcfs_mem
+            memoryMB = mem_merge_vcfs
     }
 
     call MergeMutectStats {
@@ -324,7 +343,7 @@ workflow MultiSampleMutect2 {
             stats = VariantCall.vcf_stats,
             individual_id = individual_id,
             runtime_params = standard_runtime,
-            memoryMB = merge_mutect_stats_mem
+            memoryMB = mem_merge_mutect_stats
     }
 
     if (run_contamination_model) {
@@ -338,7 +357,7 @@ workflow MultiSampleMutect2 {
                         variants_for_contamination = variants_for_contamination,
                         variants_for_contamination_idx = variants_for_contamination_idx,
                         runtime_params = standard_runtime,
-                        memoryMB = get_pileup_summaries_mem
+                        memoryMB = mem_get_pileup_summaries
                 }
             }
 
@@ -348,7 +367,7 @@ workflow MultiSampleMutect2 {
                     ref_dict = ref_dict,
                     output_name = basename(tumor_sample.left, ".bam") + ".pileup",
                     runtime_params = standard_runtime,
-                    memoryMB = gather_pileup_summaries_mem
+                    memoryMB = mem_gather_pileup_summaries
             }
         }
 
@@ -374,7 +393,7 @@ workflow MultiSampleMutect2 {
                         variants_for_contamination = variants_for_contamination,
                         variants_for_contamination_idx = variants_for_contamination_idx,
                         runtime_params = standard_runtime,
-                        memoryMB = get_pileup_summaries_mem
+                        memoryMB = mem_get_pileup_summaries
                 }
             }
 
@@ -384,7 +403,7 @@ workflow MultiSampleMutect2 {
                     ref_dict = ref_dict,
                     output_name = basename(best_normal_bam, ".bam") + ".pileup",
                     runtime_params = standard_runtime,
-                    memoryMB = gather_pileup_summaries_mem
+                    memoryMB = mem_gather_pileup_summaries
             }
         }
 
@@ -394,7 +413,7 @@ workflow MultiSampleMutect2 {
                     tumor_pileups = tumor_pileups,
                     normal_pileups = GatherNormalPileupSummaries.merged_pileup_summaries,
                     runtime_params = standard_runtime,
-                    memoryMB = calculate_contamination_mem
+                    memoryMB = mem_calculate_contamination
             }
         }
     }
@@ -405,7 +424,7 @@ workflow MultiSampleMutect2 {
                 individual_id = individual_id,
                 f1r2_counts = select_all(VariantCall.m2_artifact_priors),
                 runtime_params = standard_runtime,
-                memoryMB = learn_read_orientation_model_base_mem + num_bams * additional_per_sample_mem
+                memoryMB = mem_learn_read_orientation_model_base + num_bams * mem_additional_per_sample
         }
     }
 
@@ -432,7 +451,7 @@ workflow MultiSampleMutect2 {
                 compress_output = compress_output,
                 m2_filter_extra_args = filter_mutect2_extra_args,
                 runtime_params = standard_runtime,
-                memoryMB = filter_mutect_calls_mem,
+                memoryMB = mem_filter_mutect_calls,
         }
 
         call SelectVariants as SelectPassingVariants {
@@ -444,7 +463,7 @@ workflow MultiSampleMutect2 {
                 compress_output = compress_output,
                 select_variants_extra_args = select_variants_extra_args,
                 runtime_params = standard_runtime,
-                memoryMB = select_variants_mem
+                memoryMB = mem_select_variants
         }
 
         if (run_realignment_filter) {
@@ -464,7 +483,7 @@ workflow MultiSampleMutect2 {
                         compress_output = compress_output,
                         select_variants_extra_args = "-select " + select_low_conficence_variants_jexl_arg,
                         runtime_params = standard_runtime,
-                        memoryMB = select_variants_mem
+                        memoryMB = mem_select_variants
                 }
 
                 call SelectVariants as SelectHighConfidenceVariants {
@@ -474,19 +493,17 @@ workflow MultiSampleMutect2 {
                         compress_output = compress_output,
                         select_variants_extra_args = "-select " + select_low_conficence_variants_jexl_arg + " -invertSelect true",
                         runtime_params = standard_runtime,
-                        memoryMB = select_variants_mem
+                        memoryMB = mem_select_variants
                 }
             }
 
             File variants_to_realign = select_first([
-                if run_realignment_filter_only_on_high_confidence_variants
-                then SelectHighConfidenceVariants.selected_vcf
-                else SelectPassingVariants.selected_vcf
+                SelectHighConfidenceVariants.selected_vcf,
+                SelectPassingVariants.selected_vcf
             ])
             File variants_to_realign_idx = select_first([
-                if run_realignment_filter_only_on_high_confidence_variants
-                then SelectHighConfidenceVariants.selected_vcf_idx
-                else SelectPassingVariants.selected_vcf_idx
+                SelectHighConfidenceVariants.selected_vcf_idx,
+                SelectPassingVariants.selected_vcf_idx
             ])
 
             # Due to its long runtime, we scatter the realignment task over intervals.
@@ -501,7 +518,7 @@ workflow MultiSampleMutect2 {
                         filtered_vcf_idx = variants_to_realign_idx,
                         compress_output = compress_output,
                         runtime_params = standard_runtime,
-                        memoryMB = select_variants_mem
+                        memoryMB = mem_select_variants
                 }
 
                 call FilterAlignmentArtifacts {
@@ -518,7 +535,7 @@ workflow MultiSampleMutect2 {
                         max_reasonable_fragment_length = filter_alignment_artifacts_max_reasonable_fragment_length,
                         realignment_extra_args = realignment_extra_args,
                         runtime_params = standard_runtime,
-                        memoryMB = filter_alignment_artifacts_mem + num_bams * additional_per_sample_mem,
+                        memoryMB = mem_filter_alignment_artifacts + num_bams * mem_additional_per_sample,
                         cpu = filter_alignment_artifacts_cpu
                 }
             }
@@ -530,7 +547,7 @@ workflow MultiSampleMutect2 {
                     output_name = individual_id + ".filtered.selected.realignmentfiltered",
                     compress_output = compress_output,
                     runtime_params = standard_runtime,
-                    memoryMB = merge_vcfs_mem
+                    memoryMB = mem_merge_vcfs
             }
 
             call SelectVariants as SelectPostRealignmentVariants {
@@ -542,7 +559,7 @@ workflow MultiSampleMutect2 {
                     compress_output = compress_output,
                     select_variants_extra_args = select_variants_extra_args,
                     runtime_params = standard_runtime,
-                    memoryMB = select_variants_mem
+                    memoryMB = mem_select_variants
             }
 
             if (run_realignment_filter_only_on_high_confidence_variants) {
@@ -559,34 +576,30 @@ workflow MultiSampleMutect2 {
                         output_name = individual_id + ".filtered.selected.realignmentfiltered.selected.merged",
                         compress_output = compress_output,
                         runtime_params = standard_runtime,
-                        memoryMB = merge_vcfs_mem
+                        memoryMB = mem_merge_vcfs
                 }
             }
 
             File realignment_filtered_variants = select_first([
-                if run_realignment_filter_only_on_high_confidence_variants
-                then MergeLowConfidenceAndRealignmentFilteredVCFs.merged_vcf
-                else SelectPostRealignmentVariants.selected_vcf
+                MergeLowConfidenceAndRealignmentFilteredVCFs.merged_vcf,
+                SelectPostRealignmentVariants.selected_vcf
             ])
             File realignment_filtered_variants_idx = select_first([
-                if run_realignment_filter_only_on_high_confidence_variants
-                then MergeLowConfidenceAndRealignmentFilteredVCFs.merged_vcf_idx
-                else SelectPostRealignmentVariants.selected_vcf_idx
+                MergeLowConfidenceAndRealignmentFilteredVCFs.merged_vcf_idx,
+                SelectPostRealignmentVariants.selected_vcf_idx
             ])
         }
     }
 
     File selected_vcf = select_first([
-        if run_variant_filter then (
-            if run_realignment_filter then realignment_filtered_variants
-            else SelectPassingVariants.selected_vcf
-        ) else MergeVariantCallVCFs.merged_vcf
+        realignment_filtered_variants,
+        SelectPassingVariants.selected_vcf,
+        MergeVariantCallVCFs.merged_vcf
     ])
     File selected_vcf_idx = select_first([
-        if run_variant_filter then (
-            if run_realignment_filter then realignment_filtered_variants_idx
-            else SelectPassingVariants.selected_vcf_idx
-        ) else MergeVariantCallVCFs.merged_vcf_idx
+        realignment_filtered_variants_idx,
+        SelectPassingVariants.selected_vcf_idx,
+        MergeVariantCallVCFs.merged_vcf_idx
     ])
 
     String vcf_name = basename(basename(selected_vcf, ".gz"), ".vcf")
@@ -600,7 +613,7 @@ workflow MultiSampleMutect2 {
                 m2_bam_outs = select_all(VariantCall.bamout),
                 output_vcf_name = vcf_name,
                 runtime_params = standard_runtime,
-                memoryMB = merge_bams_mem
+                memoryMB = mem_merge_bams
         }
     }
 
@@ -609,8 +622,8 @@ workflow MultiSampleMutect2 {
         # position and allele information to get annotations but does not annotate per
         # sample. We use a workaround by splitting the multi-sample VCF into individual
         # samples and run Funcotator on each VCF.
-        # In order to get proper annotations for the normal samples, they should be
-        # called in tumor-only mode.
+        # In order to get proper annotations of somatic variants for the normal samples,
+        # they should be called in tumor-only mode.
         scatter (tumor_bam_pair in zip(tumor_bams, tumor_bais)) {
             File tumor_bam = tumor_bam_pair.left
             File tumor_bai = tumor_bam_pair.right
@@ -619,7 +632,7 @@ workflow MultiSampleMutect2 {
                 input:
                     bam = tumor_bam,
                     runtime_params = standard_runtime,
-                    memoryMB = get_sample_name_mem
+                    memoryMB = mem_get_sample_name
             }
             # We select the first normal sample to be the matched normal.
             # todo: select normal with greatest sequencing depth
@@ -628,10 +641,10 @@ workflow MultiSampleMutect2 {
             # we remove the matched normal sample from the VCF annotations. This only
             # results in the normal sample allelic coverage not being available for each
             # annotated variant.
-            String normal_sample_name = (
+            String? normal_sample_name = (
                 if normal_is_present && !run_cnn_scoring_model
                 then select_first(select_first([GetNormalSampleName.sample_name]))
-                else "Unknown"
+                else None
             )
 
             call SelectVariants as SelectSampleVariants {
@@ -641,13 +654,16 @@ workflow MultiSampleMutect2 {
                     exclude_filtered = false,  # is already filtered
                     keep_germline = keep_germline,
                     tumor_sample_name = GetTumorSampleName.sample_name,
-                    normal_sample_name = if normal_sample_name != "Unknown" then normal_sample_name else None,
+                    normal_sample_name = normal_sample_name,
                     compress_output = compress_output,
                     select_variants_extra_args = select_variants_extra_args,
                     runtime_params = standard_runtime,
-                    memoryMB = select_variants_mem
+                    memoryMB = mem_select_variants
             }
 
+            # CNNScoreVariants is very unreliable in its execution. It's probably
+            # just grief you by constantly failing the workflow for no apparent
+            # reason. This is still an issue for v4.3.0.0. You have been warned!
             if (run_cnn_scoring_model) {
                 call CNNScoreVariants {
                     input:
@@ -656,11 +672,11 @@ workflow MultiSampleMutect2 {
                         ref_dict = ref_dict,
                         input_vcf = SelectSampleVariants.selected_vcf,
                         input_vcf_idx = SelectSampleVariants.selected_vcf_idx,
-                        tumor_bam = tumor_bam,
-                        tumor_bai = tumor_bai,
+                        tumor_bam = select_first([MergeBamOuts.merged_bam_out, tumor_bam]),
+                        tumor_bai = select_first([MergeBamOuts.merged_bam_out_index, tumor_bai]),
                         compress_output = compress_output,
                         runtime_params = standard_runtime,
-                        memoryMB = cnn_scoring_mem,
+                        memoryMB = mem_cnn_scoring,
                         cpu = cnn_scoring_cpu
                 }
             }
@@ -672,19 +688,11 @@ workflow MultiSampleMutect2 {
                         ref_fasta_index = ref_fasta_index,
                         ref_dict = ref_dict,
                         interval_list = interval_list,
-                        input_vcf = (
-                            if run_cnn_scoring_model
-                            then select_first([CNNScoreVariants.scored_vcf])
-                            else SelectSampleVariants.selected_vcf
-                        ),
-                        input_vcf_idx =(
-                            if run_cnn_scoring_model
-                            then select_first([CNNScoreVariants.scored_vcf_idx])
-                            else SelectSampleVariants.selected_vcf_idx
-                        ),
+                        input_vcf = select_first([CNNScoreVariants.scored_vcf, SelectSampleVariants.selected_vcf]),
+                        input_vcf_idx = select_first([CNNScoreVariants.scored_vcf_idx, SelectSampleVariants.selected_vcf_idx]),
                         output_base_name = GetTumorSampleName.sample_name + ".annotated",
                         tumor_sample_name = GetTumorSampleName.sample_name,
-                        normal_sample_name = if normal_sample_name != "Unknown" then normal_sample_name else None,
+                        normal_sample_name = normal_sample_name,
                         transcript_list = funcotator_transcript_list,
                         data_sources_tar_gz = funcotator_data_sources_tar_gz,
                         use_gnomad = funcotator_use_gnomad,
@@ -698,7 +706,7 @@ workflow MultiSampleMutect2 {
                         exclude_fields = funcotator_exclude_fields,
                         funcotate_extra_args = funcotate_extra_args,
                         runtime_params = standard_runtime,
-                        memoryMB = funcotate_mem
+                        memoryMB = mem_funcotate
                 }
             }
         }
@@ -847,7 +855,6 @@ task VariantCall {
         # parameters might solve the issue. It increases compute cost though.
         Int downsampling_stride = 1
         Int max_reads_per_alignment_start = 50
-        String emit_ref_confidence = "BP_RESOLUTION"
 
         String? m2_extra_args
 
@@ -922,7 +929,6 @@ task VariantCall {
             ~{true="--native-pair-hmm-use-double-precision true" false="" native_pair_hmm_use_double_precision} \
             ~{"--downsampling-stride " + downsampling_stride} \
             ~{"--max-reads-per-alignment-start " + max_reads_per_alignment_start} \
-            ~{"--emit-ref-confidence " + emit_ref_confidence} \
             --seconds-between-progress-updates 300 \
             ~{m2_extra_args}
     >>>
