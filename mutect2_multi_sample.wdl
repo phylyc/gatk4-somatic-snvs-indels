@@ -211,19 +211,19 @@ workflow MultiSampleMutect2 {
         Int mem_merge_bams = 8192  # wants at least 6G
         Int mem_cnn_scoring = 4096
         Int mem_funcotate = 4096
-        
+
         # runtime assignments in minutes (for HPC cluster)
         Int time_startup = 10
         Int time_split_intervals = 1
         Int time_get_sample_name = 1
-        Int timr_variant_call = ceil(10000 / scatter_count)  # 6 d / scatter
+        Int time_variant_call_total = 10000  # 6 d / scatter
         Int time_learn_read_orientation_model = 180  # 3 h
         Int time_get_pileup_summaries = 90  # 1.5 h
         Int time_gather_pileup_summaries = 5
         Int time_calculate_contamination = 10
         Int time_filter_mutect_calls = 800  # 13 h
         Int time_select_variants = 5
-        Int time_filter_alignment_artifacts = ceil(10000 / scatter_count)  # 12 d / scatter
+        Int time_filter_alignment_artifacts_total = 10000  # 12 d / scatter
         Int time_merge_vcfs = 10
         Int time_merge_mutect_stats = 1
         Int time_merge_bams = 60
@@ -325,10 +325,10 @@ workflow MultiSampleMutect2 {
                 m2_extra_args = mutect2_extra_args,
                 gatk_docker = gatk_docker,
                 gatk_override = gatk_override,
-                memoryMB = mem_variant_call_base + num_bams * mem_additional_per_sample,,
-                runtime_minutes = time_startup + timr_variant_call
+                memoryMB = mem_variant_call_base + num_bams * mem_additional_per_sample,
+                runtime_minutes = time_startup + ceil(time_variant_call_total / scatter_count),
                 cpu = variant_call_cpu,
-                disk_spaceGB = m2_per_scatter_size,
+                disk_spaceGB = m2_per_scatter_size
 		}
 	}
 
@@ -553,7 +553,7 @@ workflow MultiSampleMutect2 {
                         realignment_extra_args = realignment_extra_args,
                         runtime_params = standard_runtime,
                         memoryMB = mem_filter_alignment_artifacts + num_bams * mem_additional_per_sample,
-                        runtime_minutes = time_startup + time_filter_alignment_artifacts,
+                        runtime_minutes = time_startup + ceil(time_filter_alignment_artifacts_total / scatter_count),
                         cpu = filter_alignment_artifacts_cpu
                 }
             }
