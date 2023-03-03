@@ -837,11 +837,10 @@ task GetSampleName {
             GetSampleName \
             -I '~{bam}' \
             -O bam_name.txt
-        cat bam_name.txt
     >>>
 
     output {
-        String sample_name = read_string(stdout())
+        String sample_name = read_string("bam_name.txt")
     }
 
     runtime {
