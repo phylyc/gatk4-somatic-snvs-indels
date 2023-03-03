@@ -210,7 +210,7 @@ workflow MultiSampleMutect2 {
         Int mem_merge_mutect_stats = 512 # 64
         Int mem_merge_bams = 8192  # wants at least 6G
         Int mem_cnn_scoring = 4096
-        Int mem_funcotate = 4096
+        Int mem_funcotate = 6144
 
         # runtime assignments in minutes (for HPC cluster)
         Int time_startup = 10
@@ -1144,6 +1144,7 @@ task GetPileupSummaries {
         exit 0
     >>>
 
+    # need to use glob in case GetPileupSummaries fails and does not produce output files
     output {
         Array[File] pileup_summaries = glob(output_name)
     }
@@ -1525,6 +1526,8 @@ task SelectVariants {
                 IndexFeatureFile \
                 --input '~{output_vcf}' \
                 --output '~{output_vcf_idx}'
+            rm '~{uncompressed_output_vcf}'
+            rm '~{uncompressed_output_vcf}.idx'
         fi
     >>>
 
@@ -1851,6 +1854,8 @@ task Funcotate {
             ~{true="--annotation-override " false="" defined(annotation_overrides)}~{default="" sep=" --annotation-override " annotation_overrides} \
             ~{true="--exclude-field " false="" defined(exclude_fields)}~{default="" sep=" --exclude-field " exclude_fields} \
             ~{funcotate_extra_args}
+
+        rm -r datasources_dir
     >>>
 
     output {
