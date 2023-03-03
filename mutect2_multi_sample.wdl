@@ -713,6 +713,7 @@ workflow MultiSampleMutect2 {
                         ref_fasta_index = ref_fasta_index,
                         ref_dict = ref_dict,
                         interval_list = interval_list,
+                        individual_id = individual_id,
                         input_vcf = select_first([CNNScoreVariants.scored_vcf, SelectSampleVariants.selected_vcf]),
                         input_vcf_idx = select_first([CNNScoreVariants.scored_vcf_idx, SelectSampleVariants.selected_vcf_idx]),
                         output_base_name = GetTumorSampleName.sample_name + ".annotated",
