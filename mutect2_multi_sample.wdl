@@ -997,7 +997,7 @@ task VariantCall {
         disks: "local-disk " + disk_space + " HDD"
         preemptible: preemptible
         maxRetries: max_retries
-        cpu: native_hmm_pair_threads
+        cpu: cpu
     }
 }
 
