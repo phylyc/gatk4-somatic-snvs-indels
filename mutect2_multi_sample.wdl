@@ -159,6 +159,8 @@ workflow MultiSampleMutect2 {
         Boolean genotype_pon_sites = false  # use with care!
 
         # arguments
+        Int split_intervals_bin_length = 0
+        Int split_intervals_padding = 0
         Boolean mutect2_native_pair_hmm_use_double_precision = true
         Boolean mutect2_use_linked_de_bruijn_graph = true
         Boolean mutect2_recover_all_dangling_branches = true
@@ -200,7 +202,7 @@ workflow MultiSampleMutect2 {
         Int mem_get_sample_name = 512
         Int mem_variant_call_base = 4096
         Int mem_learn_read_orientation_model_base = 6144
-        Int mem_get_pileup_summaries = 2048  # needs at least 2G
+        Int mem_get_pileup_summaries = 4096  # needs at least 2G
         Int mem_gather_pileup_summaries = 512  # 64
         Int mem_calculate_contamination = 8192  # depends on the variants_for_contamination resource
         Int mem_filter_mutect_calls = 4096
@@ -277,6 +279,8 @@ workflow MultiSampleMutect2 {
             ref_fasta_index = ref_fasta_index,
             ref_dict = ref_dict,
             scatter_count = scatter_count,
+            bin_length = split_intervals_bin_length,
+            padding = split_intervals_padding,
             split_intervals_extra_args = split_intervals_extra_args,
             runtime_params = standard_runtime,
             memoryMB = mem_split_intervals,
@@ -764,6 +768,8 @@ task SplitIntervals {
         File ref_fasta
         File ref_fasta_index
         File ref_dict
+        Int bin_length = 0
+        Int padding = 0
         Int scatter_count
         String? split_intervals_extra_args
 
@@ -779,6 +785,7 @@ task SplitIntervals {
         # Applied after inital scatter, so leads to more scattered intervals.
         # + " --dont-mix-contigs"
     )
+    String preprocessed_intervals = "preprocessed.interval_list"
 
     parameter_meta {
         interval_list: {localization_optional: true}
@@ -791,10 +798,20 @@ task SplitIntervals {
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         mkdir interval-files
+
+        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
+            PreprocessIntervals \
+            -R '~{ref_fasta}' \
+            ~{"-L '" + interval_list + "'"} \
+            --bin-length ~{bin_length} \
+            --padding ~{padding} \
+            --interval-merging-rule OVERLAPPING_ONLY \
+            -O ~{preprocessed_intervals}
+
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             SplitIntervals \
             -R '~{ref_fasta}' \
-            ~{"-L '" + interval_list + "'"} \
+            -L ~{preprocessed_intervals} \
             -scatter ~{scatter_count} \
             -O interval-files \
             ~{extra_args}
@@ -925,7 +942,6 @@ task VariantCall {
     String output_vcf_idx = output_vcf + if compress_output then ".tbi" else ".idx"
     String output_stats = output_vcf + ".stats"
 
-    Int native_hmm_pair_threads = 2 * cpu
     Int germline_resource_size = if defined(germline_resource) then ceil(size(germline_resource, "GB")) else 0
     Int disk_space = disk_spaceGB + germline_resource_size
 
@@ -957,7 +973,6 @@ task VariantCall {
             --pileup-detection true \
             --smith-waterman FASTEST_AVAILABLE \
             --pair-hmm-implementation FASTEST_AVAILABLE \
-            ~{"--native-pair-hmm-threads " + native_hmm_pair_threads} \
             ~{true="--native-pair-hmm-use-double-precision true" false="" native_pair_hmm_use_double_precision} \
             ~{"--downsampling-stride " + downsampling_stride} \
             ~{"--max-reads-per-alignment-start " + max_reads_per_alignment_start} \
