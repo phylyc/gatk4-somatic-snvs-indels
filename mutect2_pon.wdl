@@ -99,6 +99,7 @@ workflow Mutect2_Panel {
     )
     call msm2.SplitIntervals {
         input:
+            interval_list = interval_list,
             ref_fasta = ref_fasta,
             ref_fasta_index = ref_fasta_index,
             ref_dict = ref_dict,

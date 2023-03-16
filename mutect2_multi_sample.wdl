@@ -199,7 +199,7 @@ workflow MultiSampleMutect2 {
 
         # memory assignments in MB
         Int mem_additional_per_sample = 256  # this actually can depend on bam size (WES vs WGS)
-        Int mem_split_intervals = 2048
+        Int mem_split_intervals = 4096
         Int mem_get_sample_name = 512
         Int mem_variant_call_base = 4096
         Int mem_learn_read_orientation_model_base = 6144
