@@ -75,6 +75,8 @@ version development
 ##      It is recommended to specify an interval list that has at least the unplaced and
 ##      unlocalized contigs removed. The realignment filter task may have trouble
 ##      dealing with them.
+## interval_lists: Array of genomic intervals (optional)
+##      All intervals will be merged.
 ## scatter_count: number of parallel jobs to generate when scattering over intervals
 ##      Low scatter counts have long runtimes for each shard and increase the chance
 ##      for a preemptible to fail prematurely, thus increasing cost. On the other hand,
@@ -119,6 +121,7 @@ struct Runtime {
 workflow MultiSampleMutect2 {
     input {
         File? interval_list
+        Array[File]? interval_lists
         File ref_fasta
         File ref_fasta_index
         File ref_dict
@@ -175,6 +178,7 @@ workflow MultiSampleMutect2 {
         String funcotator_variant_type = "somatic"  # alternative: germline
         String funcotator_transcript_selection_mode = "CANONICAL"  # GATK default: "CANONICAL"
         Boolean funcotator_use_gnomad = true
+        Array[String]? funcotator_data_sources_paths
         Array[String]? funcotator_annotation_defaults
         Array[String]? funcotator_annotation_overrides
         Array[String]? funcotator_exclude_fields
@@ -275,6 +279,7 @@ workflow MultiSampleMutect2 {
     call SplitIntervals {
     	input:
             interval_list = interval_list,
+            interval_lists = interval_lists,
             ref_fasta = ref_fasta,
             ref_fasta_index = ref_fasta_index,
             ref_dict = ref_dict,
@@ -716,7 +721,7 @@ workflow MultiSampleMutect2 {
                         ref_fasta = ref_fasta,
                         ref_fasta_index = ref_fasta_index,
                         ref_dict = ref_dict,
-                        interval_list = interval_list,
+                        interval_list = SplitIntervals.preprocessed_interval_list,
                         individual_id = individual_id,
                         input_vcf = select_first([CNNScoreVariants.scored_vcf, SelectSampleVariants.selected_vcf]),
                         input_vcf_idx = select_first([CNNScoreVariants.scored_vcf_idx, SelectSampleVariants.selected_vcf_idx]),
@@ -725,6 +730,7 @@ workflow MultiSampleMutect2 {
                         normal_sample_name = normal_sample_name,
                         transcript_list = funcotator_transcript_list,
                         data_sources_tar_gz = funcotator_data_sources_tar_gz,
+                        data_sources_paths = funcotator_data_sources_paths,
                         use_gnomad = funcotator_use_gnomad,
                         compress_output = compress_output,
                         reference_version = funcotator_reference_version,
@@ -744,6 +750,7 @@ workflow MultiSampleMutect2 {
     }
 
     output {
+        File interval_list = SplitIntervals.preprocessed_interval_list
         File unfiltered_vcf = MergeVariantCallVCFs.merged_vcf
         File unfiltered_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx
         File merged_vcf = selected_vcf
@@ -765,6 +772,7 @@ workflow MultiSampleMutect2 {
 task SplitIntervals {
     input {
         File? interval_list
+        Array[File]? interval_lists
         File ref_fasta
         File ref_fasta_index
         File ref_dict
@@ -803,6 +811,7 @@ task SplitIntervals {
             PreprocessIntervals \
             -R '~{ref_fasta}' \
             ~{"-L '" + interval_list + "'"} \
+            ~{true="-L '" false="" defined(interval_lists)}~{default="" sep="' -L '" interval_lists}~{true="'" false="" defined(interval_lists)} \
             --bin-length ~{bin_length} \
             --padding ~{padding} \
             --interval-merging-rule OVERLAPPING_ONLY \
@@ -818,6 +827,7 @@ task SplitIntervals {
     >>>
 
     output {
+        File preprocessed_interval_list = preprocessed_intervals
         Array[File] interval_files = glob("interval-files/*.interval_list")
     }
 
@@ -1767,6 +1777,7 @@ task Funcotate {
         File? data_sources_tar_gz  # most recent version is downloaded if not chosen
         Boolean use_gnomad = false
         Boolean compress_output = false
+        Array[String]? data_sources_paths
         Array[String]? annotation_defaults
         Array[String]? annotation_overrides
         Array[String]? exclude_fields
@@ -1799,7 +1810,7 @@ task Funcotate {
     String output_file_index = if output_format == "MAF" then output_maf_index else output_vcf_idx
 
     # Calculate disk size:
-    Int funco_tar_sizeGB = if defined(data_sources_tar_gz) then 4 * ceil(size(data_sources_tar_gz, "GB")) else 100
+    Int funco_tar_sizeGB = if defined(data_sources_paths) then 0 else (if defined(data_sources_tar_gz) then 4 * ceil(size(data_sources_tar_gz, "GB")) else 100)
     Int diskGB = funco_tar_sizeGB + select_first([disk_spaceGB, runtime_params.disk])
 
     String dollar = "$"
@@ -1819,39 +1830,41 @@ task Funcotate {
             false
         fi
 
-        mkdir datasources_dir
-        DATA_SOURCES_FOLDER="$PWD/datasources_dir"
-        echo "Obtaining Funcotator data sources..."
-        if [[ ! -z "~{data_sources_tar_gz}" ]]; then
-            data_sources_tar_gz=~{data_sources_tar_gz}
-        else
-            data_sources_tar_gz="funcotator_datasources.tar.gz"
-            gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
-                FuncotatorDataSourceDownloader \
-                --~{variant_type} \
-                --validate-integrity \
-                --output ~{dollar}data_sources_tar_gz
-        fi
-        echo "Unzipping Funcotator data sources..."
-        tar zxvf ~{dollar}data_sources_tar_gz -C datasources_dir --strip-components 1
+        if ~{!defined(data_sources_paths)} ; then
+            mkdir datasources_dir
+            DATA_SOURCES_FOLDER="$PWD/datasources_dir"
+            echo "Obtaining Funcotator data sources..."
+            if [[ ! -z "~{data_sources_tar_gz}" ]]; then
+                data_sources_tar_gz=~{data_sources_tar_gz}
+            else
+                data_sources_tar_gz="funcotator_datasources.tar.gz"
+                gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
+                    FuncotatorDataSourceDownloader \
+                    --~{variant_type} \
+                    --validate-integrity \
+                    --output ~{dollar}data_sources_tar_gz
+            fi
+            echo "Unzipping Funcotator data sources..."
+            tar zxvf ~{dollar}data_sources_tar_gz -C datasources_dir --strip-components 1
 
-        if ~{use_gnomad} ; then
-            echo "Enabling gnomAD..."
-            for potential_gnomad_gz in gnomAD_exome.tar.gz gnomAD_genome.tar.gz ; do
-                if [[ -f ~{dollar}{DATA_SOURCES_FOLDER}/~{dollar}{potential_gnomad_gz} ]] ; then
-                    cd ~{dollar}{DATA_SOURCES_FOLDER}
-                    tar -zvxf ~{dollar}{potential_gnomad_gz}
-                    cd -
-                else
-                    echo "ERROR: Cannot find gnomAD folder: ~{dollar}{potential_gnomad_gz}" 1>&2
-                    false
-                fi
-            done
+            if ~{use_gnomad} ; then
+                echo "Enabling gnomAD..."
+                for potential_gnomad_gz in gnomAD_exome.tar.gz gnomAD_genome.tar.gz ; do
+                    if [[ -f ~{dollar}{DATA_SOURCES_FOLDER}/~{dollar}{potential_gnomad_gz} ]] ; then
+                        cd ~{dollar}{DATA_SOURCES_FOLDER}
+                        tar -zvxf ~{dollar}{potential_gnomad_gz}
+                        cd -
+                    else
+                        echo "ERROR: Cannot find gnomAD folder: ~{dollar}{potential_gnomad_gz}" 1>&2
+                        false
+                    fi
+                done
+            fi
         fi
 
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             Funcotator \
-            --data-sources-path $DATA_SOURCES_FOLDER \
+            --data-sources-path ~{true="" false="$DATA_SOURCES_FOLDER" defined(data_sources_paths)}~{default="" sep=" --data-sources-path " data_sources_paths} \
             --ref-version ~{reference_version} \
             --output-file-format ~{output_format} \
             -R '~{ref_fasta}' \
