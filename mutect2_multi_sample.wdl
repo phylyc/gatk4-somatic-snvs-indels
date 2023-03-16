@@ -266,6 +266,7 @@ workflow MultiSampleMutect2 {
         "cpu": 1,
         "machine_mem": 2024,
         "command_mem": 2024,
+        "runtime_minutes": 60,
         "disk": 1 + disk_padGB,
         "boot_disk_size": 12  # needs to be > 10
     }
@@ -776,8 +777,8 @@ task SplitIntervals {
         String? split_intervals_extra_args
 
         Runtime runtime_params
-        Int? memoryMB = 64
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
     }
 
     String extra_args = (
@@ -829,7 +830,7 @@ task SplitIntervals {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: runtime_minutes
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + runtime_params.disk + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -842,8 +843,8 @@ task GetSampleName {
         File bam
 
         Runtime runtime_params
-        Int? memoryMB = 256
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
     }
 
     parameter_meta {
@@ -867,7 +868,7 @@ task GetSampleName {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: runtime_minutes
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + runtime_params.disk + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -918,7 +919,7 @@ task VariantCall {
         Int max_retries = 2
         Int cpu = 2  # to have 4 native_hmm_pair_threads
         Int memoryMB = 8192
-        Int? runtime_minutes = 60
+        Int runtime_minutes = 60
         Int disk_spaceGB = 100
         Int boot_disk_size_GB = 12  # must be > 10
     }
@@ -1009,8 +1010,8 @@ task MergeMutectStats {
         String individual_id
 
         Runtime runtime_params
-        Int? memoryMB = 256
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
     }
 
     # Optional localization leads to cromwell error.
@@ -1037,7 +1038,7 @@ task MergeMutectStats {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: runtime_minutes
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + runtime_params.disk + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1061,8 +1062,8 @@ task LearnReadOrientationModel {
         Array[File] f1r2_counts
 
         Runtime runtime_params
-        Int? memoryMB = 8192
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
     }
 
     # Optional localization leads to cromwell error.
@@ -1098,7 +1099,7 @@ task LearnReadOrientationModel {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: runtime_minutes
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + disk_size + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1122,8 +1123,8 @@ task GetPileupSummaries {
         String? getpileupsummaries_extra_args
 
         Runtime runtime_params
-        Int? memoryMB = 2048
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
         Int? disk_spaceGB
 	}
 
@@ -1170,7 +1171,7 @@ task GetPileupSummaries {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: runtime_minutes
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + select_first([disk_spaceGB, runtime_params.disk]) + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1185,8 +1186,8 @@ task GatherPileupSummaries {
         String output_name
 
         Runtime runtime_params
-        Int? memoryMB = 64
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
     }
 
     # Optional localization leads to cromwell error.
@@ -1213,7 +1214,7 @@ task GatherPileupSummaries {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: runtime_minutes
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + runtime_params.disk + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1235,8 +1236,8 @@ task CalculateContamination {
         File? normal_pileups
 
         Runtime runtime_params
-        Int? memoryMB = 512
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
     }
 
     # Optional localization leads to cromwell error.
@@ -1270,7 +1271,7 @@ task CalculateContamination {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: runtime_minutes
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + runtime_params.disk + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1301,8 +1302,8 @@ task FilterMutectCalls {
         String? m2_filter_extra_args
 
         Runtime runtime_params
-        Int? memoryMB = 4096
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
     }
 
     # Optional localization leads to cromwell error.
@@ -1361,7 +1362,7 @@ task FilterMutectCalls {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: runtime_minutes
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + disk_spaceGB + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1391,8 +1392,8 @@ task FilterAlignmentArtifacts {
 
         Runtime runtime_params
         String? gatk_docker
-        Int? memoryMB = 4096
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
         Int? cpu = 2  # wants 4
     }
 
@@ -1445,7 +1446,7 @@ task FilterAlignmentArtifacts {
         docker: select_first([gatk_docker, runtime_params.gatk_docker])
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: runtime_minutes
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + disk_spaceGB + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1471,8 +1472,8 @@ task SelectVariants {
         String? select_variants_extra_args
 
         Runtime runtime_params
-        Int? memoryMB = 512
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
     }
 
     parameter_meta {
@@ -1556,7 +1557,7 @@ task SelectVariants {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: runtime_minutes
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + runtime_params.disk + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1574,8 +1575,8 @@ task MergeVCFs {
         Boolean compress_output = false
 
         Runtime runtime_params
-        Int? memoryMB = 512
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
     }
 
     # Optional localization leads to cromwell error.
@@ -1622,8 +1623,8 @@ task MergeBamOuts {
         String output_vcf_name
 
         Runtime runtime_params
-        Int? memoryMB = 6144
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
         Boolean use_ssd = false
     }
 
@@ -1670,7 +1671,7 @@ task MergeBamOuts {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: runtime_minutes
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + disk_spaceGB + if use_ssd then " SSD" else " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1697,8 +1698,8 @@ task CNNScoreVariants {
 
         Runtime runtime_params
         String? gatk_docker
-        Int? memoryMB = 4096
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
         Int? cpu = 1  # wants 4
     }
 
@@ -1740,7 +1741,7 @@ task CNNScoreVariants {
         docker: select_first([gatk_docker, runtime_params.gatk_docker])
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: runtime_minutes
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + disk_spaceGB + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -1777,8 +1778,8 @@ task Funcotate {
         String? funcotate_extra_args
 
         Runtime runtime_params
-        Int? memoryMB = 4096
-        Int? runtime_minutes = 60
+        Int? memoryMB
+        Int? runtime_minutes
         Int? disk_spaceGB
         Boolean use_ssd = false
     }
@@ -1886,7 +1887,7 @@ task Funcotate {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: runtime_minutes
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + diskGB + if use_ssd then " SSD" else " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
