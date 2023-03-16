@@ -166,7 +166,7 @@ workflow MultiSampleMutect2 {
         Boolean mutect2_use_linked_de_bruijn_graph = true
         Boolean mutect2_recover_all_dangling_branches = true
         Int mutect2_downstampling_stride = 50
-        Int mutect2_max_reads_per_alignment_start = 0
+        Int mutect2_max_reads_per_alignment_start = 100  # default: 50
         Int filter_mutect2_max_median_fragment_length_difference = 10000  # default: 10000
         Int filter_mutect2_min_alt_median_base_quality = 20  # default: 20
         Int filter_mutect2_min_alt_median_mapping_quality = 20  # default: -1
@@ -192,7 +192,7 @@ workflow MultiSampleMutect2 {
 
         # runtime
         Int scatter_count = 10
-        String gatk_docker = "broadinstitute/gatk:4.3.0.0"
+        String gatk_docker = "broadinstitute/gatk:4.4.0.0"
         File? gatk_override
         Int preemptible = 1
         Int max_retries = 1
@@ -200,7 +200,7 @@ workflow MultiSampleMutect2 {
 
         # memory assignments in MB
         Int mem_additional_per_sample = 256  # this actually can depend on bam size (WES vs WGS)
-        Int mem_split_intervals = 4096
+        Int mem_split_intervals = 2048
         Int mem_get_sample_name = 512
         Int mem_variant_call_base = 4096
         Int mem_learn_read_orientation_model_base = 6144
