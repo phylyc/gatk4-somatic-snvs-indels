@@ -744,7 +744,6 @@ workflow MultiSampleMutect2 {
     }
 
     output {
-        File interval_list = SplitIntervals.preprocessed_interval_list
         File unfiltered_vcf = MergeVariantCallVCFs.merged_vcf
         File unfiltered_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx
         File merged_vcf = selected_vcf
