@@ -57,6 +57,7 @@ workflow Mutect2_Panel {
         "cpu": 1,
         "machine_mem": 2024,
         "command_mem": 2024,
+        "runtime_minutes": 60,
         "disk": 1 + disk_padGB,
         "boot_disk_size": 12  # needs to be > 10
     }
