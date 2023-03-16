@@ -38,8 +38,8 @@ workflow Mutect2_Panel_from_File {
         Int num_contigs = 24
 
         # runtime
-        Int scatter_count = 42
-        String gatk_docker = "broadinstitute/gatk"
+        Int scatter_count = 10
+        String gatk_docker = "broadinstitute/gatk:4.3.0.0"
         File? gatk_override
         Int preemptible = 2
         Int max_retries = 2

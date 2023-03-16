@@ -32,8 +32,6 @@ version development
 ## compress_output:
 ## make_bamout:
 ## funcotator_use_gnomad:
-## keep_germline: retains germline variants; currently not supported. They are being
-##      filtered by the SelectVariants task.
 ## genotype_germline_sites: Use with care! https://github.com/broadinstitute/gatk/issues/7391
 ## genotype_pon_sites:
 ## native_pair_hmm_use_double_precision:
@@ -157,7 +155,6 @@ workflow MultiSampleMutect2 {
         Boolean compress_output = true
         Boolean make_bamout = false
 
-        Boolean keep_germline = false  # not currently supported
         Boolean genotype_germline_sites = false  # use with care!
         Boolean genotype_pon_sites = false  # use with care!
 
@@ -167,8 +164,8 @@ workflow MultiSampleMutect2 {
         Boolean mutect2_native_pair_hmm_use_double_precision = true
         Boolean mutect2_use_linked_de_bruijn_graph = true
         Boolean mutect2_recover_all_dangling_branches = true
-        Int mutect2_downstampling_stride = 1
-        Int mutect2_max_reads_per_alignment_start = 50
+        Int mutect2_downstampling_stride = 50
+        Int mutect2_max_reads_per_alignment_start = 0
         Int filter_mutect2_max_median_fragment_length_difference = 10000  # default: 10000
         Int filter_mutect2_min_alt_median_base_quality = 20  # default: 20
         Int filter_mutect2_min_alt_median_mapping_quality = 20  # default: -1
@@ -481,7 +478,6 @@ workflow MultiSampleMutect2 {
                 filtered_vcf = FilterMutectCalls.filtered_vcf,
                 filtered_vcf_idx = FilterMutectCalls.filtered_vcf_idx,
                 exclude_filtered = true,
-                keep_germline = keep_germline,
                 compress_output = compress_output,
                 select_variants_extra_args = select_variants_extra_args,
                 runtime_params = standard_runtime,
@@ -583,7 +579,6 @@ workflow MultiSampleMutect2 {
                     filtered_vcf = MergeRealignmentFilteredVCFs.merged_vcf,
                     filtered_vcf_idx = MergeRealignmentFilteredVCFs.merged_vcf_idx,
                     exclude_filtered = true,
-                    keep_germline = keep_germline,
                     compress_output = compress_output,
                     select_variants_extra_args = select_variants_extra_args,
                     runtime_params = standard_runtime,
@@ -684,7 +679,6 @@ workflow MultiSampleMutect2 {
                     filtered_vcf = selected_vcf,
                     filtered_vcf_idx = selected_vcf_idx,
                     exclude_filtered = false,  # is already filtered
-                    keep_germline = keep_germline,
                     tumor_sample_name = GetTumorSampleName.sample_name,
                     normal_sample_name = normal_sample_name,
                     compress_output = compress_output,
@@ -1471,7 +1465,6 @@ task SelectVariants {
         File filtered_vcf
         File filtered_vcf_idx
         Boolean exclude_filtered = false
-        Boolean keep_germline = false
         Boolean compress_output = false
         String? tumor_sample_name
         String? normal_sample_name
