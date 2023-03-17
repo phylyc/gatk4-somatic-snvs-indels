@@ -57,7 +57,7 @@ workflow Mutect2_Panel {
         "cpu": 1,
         "machine_mem": 4096,
         "command_mem": 2048,
-        "runtime_minutes": 60,
+        "runtime_minutes": 180,
         "disk": 1 + disk_padGB,
         "boot_disk_size": 12  # needs to be > 10
     }
@@ -165,7 +165,8 @@ task CreatePanel {
 
         # runtime
         Runtime runtime_params
-        Int memoryMB = 8186
+        Int diskGB = 50
+        Int memoryMB = 16384
     }
 
     # GenomicsDB requires that the reference be a local file.
@@ -176,9 +177,9 @@ task CreatePanel {
         gnomad_idx: {localization_optional: true}
     }
 
-    Int vcf_size = 2 * ceil(size(input_vcfs, "GB"))
+    Int vcf_size = 3 * ceil(size(input_vcfs, "GB"))
     Int command_memMB = memoryMB - 2024
-    Int disk_size = runtime_params.disk + vcf_size + ceil(length(input_vcfs) / 10)
+    Int disk_size = diskGB + vcf_size + ceil(length(input_vcfs) / 10)
 
     String output_file = output_vcf_name + ".vcf.gz"
     String output_file_idx = output_file + ".tbi"

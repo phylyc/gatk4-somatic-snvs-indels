@@ -28,9 +28,6 @@ workflow Mutect2_Panel_from_VCFs {
         File normal_vcfs_file
         File normal_vcf_indices_file
 
-        File germline_resource
-        File germline_resource_idx
-
         Boolean compress_output = true
         String pon_name
 
@@ -89,8 +86,6 @@ workflow Mutect2_Panel_from_VCFs {
                 ref_fasta_index = ref_fasta_index,
                 ref_dict = ref_dict,
                 compress_output = compress_output,
-                gnomad = germline_resource,
-                gnomad_idx = germline_resource_idx,
                 output_vcf_name = pon_name,
                 runtime_params = standard_runtime
         }
