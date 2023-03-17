@@ -55,8 +55,8 @@ workflow Mutect2_Panel {
         "max_retries": max_retries,
         "preemptible": preemptible,
         "cpu": 1,
-        "machine_mem": 2024,
-        "command_mem": 2024,
+        "machine_mem": 4096,
+        "command_mem": 2048,
         "runtime_minutes": 60,
         "disk": 1 + disk_padGB,
         "boot_disk_size": 12  # needs to be > 10
@@ -177,6 +177,7 @@ task CreatePanel {
     }
 
     Int vcf_size = 2 * ceil(size(input_vcfs, "GB"))
+    Int command_memMB = memoryMB - 2024
     Int disk_size = runtime_params.disk + vcf_size + ceil(length(input_vcfs) / 10)
 
     String output_file = output_vcf_name + ".vcf.gz"
@@ -186,19 +187,19 @@ task CreatePanel {
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
 
-        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
+        gatk --java-options "-Xmx~{select_first([command_memMB, runtime_params.command_mem])}m" \
             GenomicsDBImport \
             --genomicsdb-workspace-path pon_db \
-            -R ~{ref_fasta} \
-            -V ~{sep=' -V ' input_vcfs} \
-            -L ~{interval_list}
+            -R '~{ref_fasta}' \
+            ~{sep="' " prefix("-V '", input_vcfs)}' \
+            -L '~{interval_list}'
 
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             CreateSomaticPanelOfNormals \
-            -R ~{ref_fasta} \
-            --germline-resource ~{gnomad} \
+            -R '~{ref_fasta}' \
+            --germline-resource '~{gnomad}' \
             -V gendb://pon_db \
-            -O ~{output_file} \
+            -O '~{output_file}' \
             --min-sample-count ~{min_sample_count} \
             ~{create_pon_extra_args}
     }

@@ -16,6 +16,7 @@ version development
 
 # import "mutect2_multi_sample.wdl" as msm2
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2_multi_sample.wdl" as msm2
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2_pon.wdl" as m2pon
 
 workflow Mutect2_Panel_from_VCFs {
     input {
@@ -37,7 +38,7 @@ workflow Mutect2_Panel_from_VCFs {
         Int num_contigs = 24
 
         # runtime
-        Int scatter_count = 42
+        Int scatter_count = 10
         String gatk_docker = "broadinstitute/gatk"
         File? gatk_override
         Int preemptible = 2
@@ -56,8 +57,9 @@ workflow Mutect2_Panel_from_VCFs {
         "max_retries": max_retries,
         "preemptible": preemptible,
         "cpu": 1,
-        "machine_mem": 2024,
-        "command_mem": 2024,
+        "machine_mem": 4096,
+        "command_mem": 2048,
+        "runtime_minutes": 60,
         "disk": 1 + disk_padGB,
         "boot_disk_size": 12  # needs to be > 10
     }
@@ -68,6 +70,7 @@ workflow Mutect2_Panel_from_VCFs {
     )
     call msm2.SplitIntervals {
         input:
+            interval_list = interval_list,
             ref_fasta = ref_fasta,
             ref_fasta_index = ref_fasta_index,
             ref_dict = ref_dict,
@@ -77,7 +80,7 @@ workflow Mutect2_Panel_from_VCFs {
     }
 
     scatter (scattered_intervals in SplitIntervals.interval_files) {
-        call CreatePanel {
+        call m2pon.CreatePanel {
             input:
                 input_vcfs = read_lines(normal_vcfs_file),
                 input_vcf_indices = read_lines(normal_vcf_indices_file),
@@ -105,81 +108,5 @@ workflow Mutect2_Panel_from_VCFs {
     output {
         File pon = MergeVCFs.merged_vcf
         File pon_idx = MergeVCFs.merged_vcf_idx
-    }
-}
-
-task CreatePanel {
-    input {
-        File interval_list
-        File ref_fasta
-        File ref_fasta_index
-        File ref_dict
-
-        Array[File]+ input_vcfs
-        Array[File]+ input_vcf_indices
-        String output_vcf_name
-
-        Boolean compress_output = false
-        File gnomad
-        File gnomad_idx
-
-        # UMCCR found that 5 is optimizing the F2 score, but not by much compared to 2:
-        # https://umccr.org/blog/panel-of-normals/
-        Int min_sample_count = 2
-        String? create_pon_extra_args
-
-        # runtime
-        Runtime runtime_params
-        Int memoryMB = 8186
-    }
-
-    # GenomicsDB requires that the reference be a local file.
-    parameter_meta{
-        input_vcfs: {localization_optional: true}
-        input_vcf_indices: {localization_optional: true}
-        gnomad: {localization_optional: true}
-        gnomad_idx: {localization_optional: true}
-    }
-
-    Int vcf_size = 2 * ceil(size(input_vcfs, "GB"))
-    Int disk_size = runtime_params.disk + vcf_size + ceil(length(input_vcfs) / 10)
-
-    String output_file = output_vcf_name + ".vcf.gz"
-    String output_file_idx = output_file + ".tbi"
-
-    command {
-        set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
-
-        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
-            GenomicsDBImport \
-            --genomicsdb-workspace-path pon_db \
-            -R ~{ref_fasta} \
-            -V ~{sep=' -V ' input_vcfs} \
-            -L ~{interval_list}
-
-        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
-            CreateSomaticPanelOfNormals \
-            -R ~{ref_fasta} \
-            --germline-resource ~{gnomad} \
-            -V gendb://pon_db \
-            -O ~{output_file} \
-            --min-sample-count ~{min_sample_count} \
-            ~{create_pon_extra_args}
-    }
-
-    runtime {
-        docker: runtime_params.gatk_docker
-        bootDiskSizeGb: runtime_params.boot_disk_size
-        memory: memoryMB + " MB"
-        disks: "local-disk " + disk_size + " HDD"
-        preemptible: runtime_params.preemptible
-        maxRetries: runtime_params.max_retries
-        cpu: runtime_params.cpu
-    }
-
-    output {
-        File output_vcf = output_file
-        File output_vcf_index = output_file_idx
     }
 }
