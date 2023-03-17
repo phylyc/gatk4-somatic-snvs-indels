@@ -32,10 +32,9 @@ workflow Mutect2_Panel_from_VCFs {
         String pon_name
 
         Int min_contig_size = 1000000
-        Int num_contigs = 24
 
         # runtime
-        Int scatter_count = 10
+        Int scatter_count = 24
         String gatk_docker = "broadinstitute/gatk"
         File? gatk_override
         Int preemptible = 2
@@ -71,7 +70,7 @@ workflow Mutect2_Panel_from_VCFs {
             ref_fasta = ref_fasta,
             ref_fasta_index = ref_fasta_index,
             ref_dict = ref_dict,
-            scatter_count = num_contigs,
+            scatter_count = scatter_count,
             split_intervals_extra_args = split_intervals_extra_args,
             runtime_params = standard_runtime
     }
