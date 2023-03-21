@@ -104,6 +104,9 @@ version development
 ## pages at https://hub.docker.com/r/broadinstitute/* for detailed licensing information
 ## pertaining to the included programs.
 
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/eval_intervals.wdl" as eval_i
+
+
 struct Runtime {
     String gatk_docker
     File? gatk_override
@@ -130,8 +133,8 @@ workflow MultiSampleMutect2 {
         Array[File]+ tumor_bais
         Array[File]? normal_bams
         Array[File]? normal_bais
-        Array[String]? tumor_sample_ids
-        Array[String]? normal_sample_ids
+        Array[String]? tumor_sample_names
+        Array[String]? normal_sample_names
 
         # resources
         File? panel_of_normals
@@ -145,6 +148,7 @@ workflow MultiSampleMutect2 {
         File? funcotator_data_sources_tar_gz
 
         # workflow options
+        Boolean call_covered_regions_only = true
         Boolean run_contamination_model = true
         Boolean run_orientation_bias_mixture_model = true
         Boolean run_variant_filter = true
@@ -160,12 +164,15 @@ workflow MultiSampleMutect2 {
         Boolean genotype_pon_sites = false  # use with care!
 
         # arguments
-        Int split_intervals_bin_length = 0
-        Int split_intervals_padding = 0
+        Int preprocess_intervals_bin_length = 0
+        Int preprocess_intervals_padding = 0
+        Int min_read_depth_threshold = 1
+        Int get_evaluation_intervals_bin_length = 0
+        Int get_evaluation_intervals_padding = 0
         Boolean mutect2_native_pair_hmm_use_double_precision = true
         Boolean mutect2_use_linked_de_bruijn_graph = true
         Boolean mutect2_recover_all_dangling_branches = true
-        Int mutect2_downstampling_stride = 50
+        Int mutect2_downstampling_stride = 50  # default 1
         Int mutect2_max_reads_per_alignment_start = 100  # default: 50
         Int filter_mutect2_max_median_fragment_length_difference = 10000  # default: 10000
         Int filter_mutect2_min_alt_median_base_quality = 20  # default: 20
@@ -192,7 +199,8 @@ workflow MultiSampleMutect2 {
 
         # runtime
         Int scatter_count = 10
-        String gatk_docker = "broadinstitute/gatk:4.4.0.0"
+        String bedtools_docker = "staphb/bedtools"
+        String gatk_docker = "broadinstitute/gatk"
         File? gatk_override
         Int preemptible = 1
         Int max_retries = 1
@@ -200,7 +208,10 @@ workflow MultiSampleMutect2 {
 
         # memory assignments in MB
         Int mem_additional_per_sample = 256  # this actually can depend on bam size (WES vs WGS)
-        Int mem_split_intervals = 2048
+        Int mem_preprocess_intervals = 2048
+        Int mem_get_genome_coverage = 4096
+        Int mem_get_evaluation_intervals = 4096
+        Int mem_split_intervals = 512
         Int mem_get_sample_name = 512
         Int mem_variant_call_base = 4096
         Int mem_learn_read_orientation_model_base = 6144
@@ -218,6 +229,9 @@ workflow MultiSampleMutect2 {
 
         # runtime assignments in minutes (for HPC cluster)
         Int time_startup = 10
+        Int time_preprocess_intervals = 60
+        Int time_get_genome_coverage = 60
+        Int time_get_evaluation_intervals = 60
         Int time_split_intervals = 1
         Int time_get_sample_name = 1
         Int time_variant_call_total = 10000  # 6 d / scatter
@@ -272,23 +286,14 @@ workflow MultiSampleMutect2 {
         "boot_disk_size": 12  # needs to be > 10
     }
 
-    # TODO: Determine covered region of the genome first (with depth threshold)
-    #       and use this as interval list for variant calling.
-
-    call SplitIntervals {
-    	input:
-            interval_list = interval_list,
-            interval_lists = interval_lists,
-            ref_fasta = ref_fasta,
-            ref_fasta_index = ref_fasta_index,
-            ref_dict = ref_dict,
-            scatter_count = scatter_count,
-            bin_length = split_intervals_bin_length,
-            padding = split_intervals_padding,
-            split_intervals_extra_args = split_intervals_extra_args,
-            runtime_params = standard_runtime,
-            memoryMB = mem_split_intervals,
-            runtime_minutes = time_startup + time_split_intervals
+    scatter (tumor_bam in tumor_bams) {
+        call GetSampleName as GetTumorSampleName {
+            input:
+                bam = tumor_bam,
+                runtime_params = standard_runtime,
+                memoryMB = mem_get_sample_name,
+                runtime_minutes = time_startup + time_get_sample_name
+        }
     }
 
     if (normal_is_present) {
@@ -301,6 +306,67 @@ workflow MultiSampleMutect2 {
                     runtime_minutes = time_startup + time_get_sample_name
             }
         }
+    }
+
+    Array[String] non_optional_tumor_sample_names = select_first([tumor_sample_names, GetTumorSampleName.sample_name])
+
+    call PreprocessIntervals {
+        input:
+            interval_list = interval_list,
+            interval_lists = interval_lists,
+            ref_fasta = ref_fasta,
+            ref_fasta_index = ref_fasta_index,
+            ref_dict = ref_dict,
+            bin_length = preprocess_intervals_bin_length,
+            padding = preprocess_intervals_padding,
+            runtime_params = standard_runtime,
+            memoryMB = mem_preprocess_intervals,
+            runtime_minutes = time_startup + time_preprocess_intervals
+    }
+
+    if (call_covered_regions_only) {
+        call eval_i.EvaluationIntervals {
+            input:
+                interval_list = PreprocessIntervals.preprocessed_interval_list,
+                ref_fasta = ref_fasta,
+                ref_fasta_index = ref_fasta_index,
+                ref_dict = ref_dict,
+                collection_name = individual_id,
+                sample_names = non_optional_tumor_sample_names,
+                input_bams = tumor_bams,
+                input_bais = tumor_bais,
+                intervals_bin_length = get_evaluation_intervals_bin_length,
+                intervals_padding = get_evaluation_intervals_padding,
+                bedtools_docker = bedtools_docker,
+                gatk_docker = gatk_docker,
+                gatk_override = gatk_override,
+                preemptible = preemptible,
+                max_retries = max_retries,
+                emergency_extra_diskGB = emergency_extra_diskGB,
+                mem_get_genome_coverage = mem_get_genome_coverage,
+                mem_get_evaluation_intervals = mem_get_evaluation_intervals,
+                time_startup = time_startup,
+                time_get_genome_coverage = time_get_genome_coverage,
+                time_get_evaluation_intervals = time_get_evaluation_intervals
+        }
+    }
+
+    File evaluation_interval_list = select_first([
+        PreprocessIntervals.preprocessed_interval_list,
+        EvaluationIntervals.evaluation_intervals
+    ])
+
+    call SplitIntervals {
+    	input:
+            interval_list = evaluation_interval_list,
+            ref_fasta = ref_fasta,
+            ref_fasta_index = ref_fasta_index,
+            ref_dict = ref_dict,
+            scatter_count = scatter_count,
+            split_intervals_extra_args = split_intervals_extra_args,
+            runtime_params = standard_runtime,
+            memoryMB = mem_split_intervals,
+            runtime_minutes = time_startup + time_split_intervals
     }
 
     scatter (scattered_intervals in SplitIntervals.interval_files) {
@@ -652,17 +718,13 @@ workflow MultiSampleMutect2 {
         # samples and run Funcotator on each VCF.
         # In order to get proper annotations of somatic variants for the normal samples,
         # they should be called in tumor-only mode.
-        scatter (tumor_bam_pair in zip(tumor_bams, tumor_bais)) {
-            File tumor_bam = tumor_bam_pair.left
-            File tumor_bai = tumor_bam_pair.right
 
-            call GetSampleName as GetTumorSampleName {
-                input:
-                    bam = tumor_bam,
-                    runtime_params = standard_runtime,
-                    memoryMB = mem_get_sample_name,
-                    runtime_minutes = time_startup + time_get_sample_name
-            }
+        scatter (tumor_sample in zip(zip(non_optional_tumor_sample_names, GetTumorSampleName.sample_name), zip(tumor_bams, tumor_bais))) {
+            String assigned_tumor_sample_name =tumor_sample.left.left
+            String tumor_bam_sample_name = tumor_sample.left.right
+            File tumor_bam = tumor_sample.right.left
+            File tumor_bai = tumor_sample.right.right
+
             # We select the first normal sample to be the matched normal.
             # todo: select normal with greatest sequencing depth
             # The default CNNScoreVariant model should not be used on VCFs with
@@ -681,7 +743,7 @@ workflow MultiSampleMutect2 {
                     filtered_vcf = selected_vcf,
                     filtered_vcf_idx = selected_vcf_idx,
                     exclude_filtered = false,  # is already filtered
-                    tumor_sample_name = GetTumorSampleName.sample_name,
+                    tumor_sample_name = tumor_bam_sample_name,
                     normal_sample_name = normal_sample_name,
                     compress_output = compress_output,
                     select_variants_extra_args = select_variants_extra_args,
@@ -717,12 +779,12 @@ workflow MultiSampleMutect2 {
                         ref_fasta = ref_fasta,
                         ref_fasta_index = ref_fasta_index,
                         ref_dict = ref_dict,
-                        interval_list = SplitIntervals.preprocessed_interval_list,
+                        interval_list = evaluation_interval_list,
                         individual_id = individual_id,
                         input_vcf = select_first([CNNScoreVariants.scored_vcf, SelectSampleVariants.selected_vcf]),
                         input_vcf_idx = select_first([CNNScoreVariants.scored_vcf_idx, SelectSampleVariants.selected_vcf_idx]),
-                        output_base_name = GetTumorSampleName.sample_name + ".annotated",
-                        tumor_sample_name = GetTumorSampleName.sample_name,
+                        output_base_name = assigned_tumor_sample_name + ".annotated",
+                        tumor_sample_name = assigned_tumor_sample_name,
                         normal_sample_name = normal_sample_name,
                         transcript_list = funcotator_transcript_list,
                         data_sources_tar_gz = funcotator_data_sources_tar_gz,
@@ -746,7 +808,8 @@ workflow MultiSampleMutect2 {
     }
 
     output {
-        File calling_intervals = SplitIntervals.preprocessed_interval_list
+        Array[File]? covered_intervals = EvaluationIntervals.covered_intervals
+        File evaluation_intervals = evaluation_interval_list
         File unfiltered_vcf = MergeVariantCallVCFs.merged_vcf
         File unfiltered_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx
         File merged_vcf = selected_vcf
@@ -765,15 +828,71 @@ workflow MultiSampleMutect2 {
     }
 }
 
-task SplitIntervals {
+task PreprocessIntervals {
     input {
         File? interval_list
         Array[File]? interval_lists
         File ref_fasta
         File ref_fasta_index
         File ref_dict
+
         Int bin_length = 0
         Int padding = 0
+        String? preprocess_intervals_extra_args
+
+        Runtime runtime_params
+        Int? memoryMB
+        Int? runtime_minutes
+    }
+
+    parameter_meta {
+        interval_list: {localization_optional: true}
+        interval_lists: {localization_optional: true}
+        ref_fasta: {localization_optional: true}
+        ref_fasta_index: {localization_optional: true}
+        ref_dict: {localization_optional: true}
+    }
+
+    String preprocessed_intervals = "preprocessed.interval_list"
+
+    command <<<
+        set -e
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
+            PreprocessIntervals \
+            -R '~{ref_fasta}' \
+            ~{"-L '" + interval_list + "'"} \
+            ~{true="-I '" false="" defined(interval_lists)}~{default="" sep="' -I '" interval_lists}~{true="'" false="" defined(interval_lists)} \
+            --bin-length ~{bin_length} \
+            --padding ~{padding} \
+            --interval-merging-rule OVERLAPPING_ONLY \
+            -O '~{preprocessed_intervals}' \
+            ~{preprocess_intervals_extra_args}
+    >>>
+
+    output {
+        File preprocessed_interval_list = preprocessed_intervals
+    }
+
+    runtime {
+        docker: runtime_params.gatk_docker
+        bootDiskSizeGb: runtime_params.boot_disk_size
+        memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
+        disks: "local-disk " + runtime_params.disk + " HDD"
+        preemptible: runtime_params.preemptible
+        maxRetries: runtime_params.max_retries
+        cpu: runtime_params.cpu
+    }
+}
+
+task SplitIntervals {
+    input {
+        File? interval_list
+        File ref_fasta
+        File ref_fasta_index
+        File ref_dict
+
         Int scatter_count
         String? split_intervals_extra_args
 
@@ -789,7 +908,6 @@ task SplitIntervals {
         # Applied after inital scatter, so leads to more scattered intervals.
         # + " --dont-mix-contigs"
     )
-    String preprocessed_intervals = "preprocessed.interval_list"
 
     parameter_meta {
         interval_list: {localization_optional: true}
@@ -802,28 +920,16 @@ task SplitIntervals {
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
         mkdir interval-files
-
-        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
-            PreprocessIntervals \
-            -R '~{ref_fasta}' \
-            ~{"-L '" + interval_list + "'"} \
-            ~{true="-L '" false="" defined(interval_lists)}~{default="" sep="' -L '" interval_lists}~{true="'" false="" defined(interval_lists)} \
-            --bin-length ~{bin_length} \
-            --padding ~{padding} \
-            --interval-merging-rule OVERLAPPING_ONLY \
-            -O ~{preprocessed_intervals}
-
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             SplitIntervals \
             -R '~{ref_fasta}' \
-            -L ~{preprocessed_intervals} \
+            ~{"-L '" + interval_list + "'"} \
             -scatter ~{scatter_count} \
             -O interval-files \
             ~{extra_args}
     >>>
 
     output {
-        File preprocessed_interval_list = preprocessed_intervals
         Array[File] interval_files = glob("interval-files/*.interval_list")
     }
 
