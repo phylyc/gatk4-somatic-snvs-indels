@@ -1,6 +1,8 @@
 version development
 
+
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/create_AF_only_germline_resource.wdl" as singleAFonly
+
 
 workflow CreateAFonlyVcf_from_File {
     input {
@@ -113,6 +115,7 @@ task MergeVCFs {
         Int boot_disk_size = 12
         Int machine_memoryMB = 512
         Int command_memoryMB = 512
+        Int runtime_minutes = 60
     }
 
     # Optional localization leads to cromwell error.
@@ -145,6 +148,7 @@ task MergeVCFs {
         bootDiskSizeGb: boot_disk_size
         memory: machine_memoryMB + " MB"
         disks: "local-disk " + select_first([disk, diskGB]) + " HDD"
+        runtime_minutes: runtime_minutes
         preemptible: preemptible
         maxRetries: max_retries
         cpu: cpu

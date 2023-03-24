@@ -1,16 +1,8 @@
 version development
 
-struct Runtime {
-    String gatk_docker
-    File? gatk_override
-    Int max_retries
-    Int preemptible
-    Int cpu
-    Int machine_mem
-    Int command_mem
-    Int disk
-    Int boot_disk_size
-}
+
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/util.wdl" as util
+
 
 workflow CreateAFonlyVcf {
     input {
@@ -34,13 +26,14 @@ workflow CreateAFonlyVcf {
     }
 
     Runtime standard_runtime = {
-        "gatk_docker": gatk_docker,
-        "gatk_override": gatk_override,
+        "docker": gatk_docker,
+        "jar_override": gatk_override,
         "max_retries": max_retries,
         "preemptible": preemptible,
         "cpu": 1,
         "machine_mem": 2024,
         "command_mem": 2024,
+        "runtime_minutes": 60,
         "disk": 1,
         "boot_disk_size": 12  # needs to be > 10
     }
@@ -84,7 +77,7 @@ task SelectAFonly {
         String? select_variants_extra_args
 
         Runtime runtime_params
-        String? docker
+        String? docker = "dceoy/bcftools"
     }
 
     parameter_meta {
@@ -112,9 +105,10 @@ task SelectAFonly {
 	}
 
     runtime {
-        docker: select_first([docker, "dceoy/bcftools"])
+        docker: select_first([docker, runtime_params.docker])
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: runtime_params.machine_mem + " MB"
+        runtime_minutes: runtime_params.runtime_minutes
         disks: "local-disk " + diskGB + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
@@ -157,7 +151,7 @@ task SelectVariants {
 
 	command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
         gatk --java-options "-Xmx~{runtime_params.command_mem}m" \
             SelectVariants \
             -R ~{ref_fasta} \
@@ -199,9 +193,10 @@ task SelectVariants {
 	}
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: runtime_params.machine_mem + " MB"
+        runtime_minutes: runtime_params.runtime_minutes
         disks: "local-disk " + diskGB + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
