@@ -76,9 +76,11 @@ workflow Mutect2_Panel {
                 ref_fasta = ref_fasta,
                 ref_fasta_index = ref_fasta_index,
                 ref_dict = ref_dict,
+
                 individual_id = GetSampleName.sample_name,
                 tumor_bams = [normal_bam.left],
                 tumor_bais = [normal_bam.right],
+
                 call_covered_regions_only = false,
                 run_contamination_model = false,
                 run_orientation_bias_mixture_model = false,
@@ -86,6 +88,7 @@ workflow Mutect2_Panel {
                 run_realignment_filter = false,
                 run_cnn_scoring_model = false,
                 run_funcotator = false,
+
                 compress_output = compress_output,
                 scatter_count = scatter_count,
                 mutect2_extra_args = mutect2_extra_args + " --max-mnp-distance 0",
