@@ -8,11 +8,27 @@ import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2_m
 
 workflow Mutect2 {
     input {
+        File? interval_list
+        Array[File]? interval_lists
+        File ref_fasta
+        File ref_fasta_index
+        File ref_dict
+
         String? individual_id
         File tumor_bam
         File tumor_bai
         File? normal_bam
         File? normal_bai
+
+        # workflow options
+        Boolean call_covered_regions_only = true
+        Boolean run_contamination_model = true
+        Boolean run_orientation_bias_mixture_model = true
+        Boolean run_variant_filter = true
+        Boolean run_realignment_filter = true
+        Boolean run_realignment_filter_only_on_high_confidence_variants = false
+        Boolean run_cnn_scoring_model = false  # likely leads to failure if true; better performance with make_bamout = true
+        Boolean run_funcotator = true
 
         # runtime
         String gatk_docker = "broadinstitute/gatk"
@@ -42,11 +58,26 @@ workflow Mutect2 {
 
     call msm2.MultiSampleMutect2 {
         input:
+            interval_list = interval_list,
+            interval_lists = interval_lists,
+            ref_fasta = ref_fasta,
+            ref_fasta_index = ref_fasta_index,
+            ref_dict = ref_dict,
+
             individual_id = select_first([individual_id, GetSampleName.sample_name]),
             tumor_bams = [tumor_bam],
             tumor_bais = [tumor_bai],
             normal_bams = if defined(normal_bam) then select_all([normal_bam]) else None,
             normal_bais = if defined(normal_bai) then select_all([normal_bai]) else None,
+
+            call_covered_regions_only = call_covered_regions_only,
+            run_contamination_model = run_contamination_model,
+            run_orientation_bias_mixture_model = run_orientation_bias_mixture_model,
+            run_variant_filter = run_variant_filter,
+            run_realignment_filter = run_realignment_filter,
+            run_realignment_filter_only_on_high_confidence_variants = run_realignment_filter_only_on_high_confidence_variants,
+            run_cnn_scoring_model = run_cnn_scoring_model,
+            run_funcotator = run_funcotator,
 
             gatk_docker = gatk_docker,
             gatk_override = gatk_override,
