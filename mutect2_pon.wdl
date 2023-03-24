@@ -57,7 +57,7 @@ workflow Mutect2_Panel {
         "cpu": 1,
         "machine_mem": 4096,
         "command_mem": 2048,
-        "runtime_minutes": 180,
+        "runtime_minutes": 60,
         "disk": 1 + disk_padGB,
         "boot_disk_size": 12  # needs to be > 10
     }
@@ -167,6 +167,7 @@ task CreatePanel {
         Runtime runtime_params
         Int diskGB = 50
         Int memoryMB = 16384
+        Int? runtime_minutes
     }
 
     # GenomicsDB requires that the reference be a local file.
@@ -181,6 +182,7 @@ task CreatePanel {
     Int command_memMB = memoryMB - 2024
     Int disk_size = diskGB + vcf_size + ceil(length(input_vcfs) / 10)
 
+    String pon_file = "pon.vcf.gz"
     String output_file = output_vcf_name + ".vcf.gz"
     String output_file_idx = output_file + ".tbi"
 
@@ -200,15 +202,21 @@ task CreatePanel {
             -R '~{ref_fasta}' \
             --germline-resource '~{gnomad}' \
             -V gendb://pon_db \
-            -O '~{output_file}' \
+            -O '~{pon_file}' \
             --min-sample-count ~{min_sample_count} \
             ~{create_pon_extra_args}
+
+        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
+            SortVcf \
+            -I '~{pon_file}' \
+            -O '~{output_file}'
     }
 
     runtime {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: memoryMB + " MB"
+        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
         disks: "local-disk " + disk_size + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
