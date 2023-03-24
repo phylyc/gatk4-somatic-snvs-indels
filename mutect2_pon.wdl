@@ -154,7 +154,7 @@ task CreatePanel {
         Array[File]+ input_vcf_indices
         String output_vcf_name
 
-        Boolean compress_output = false
+        Boolean compress_output = true
         File gnomad
         File gnomad_idx
 
@@ -183,8 +183,8 @@ task CreatePanel {
     Int disk_size = diskGB + vcf_size + ceil(length(input_vcfs) / 10)
 
     String pon_file = "pon.vcf.gz"
-    String output_file = output_vcf_name + ".vcf.gz"
-    String output_file_idx = output_file + ".tbi"
+    String output_file = output_vcf_name + if compress_output then ".vcf.gz" else ".vcf"
+    String output_file_idx = output_file + if compress_output then ".tbi" else ".idx"
 
     command {
         set -e
@@ -212,6 +212,11 @@ task CreatePanel {
             -O '~{output_file}'
     }
 
+    output {
+        File output_vcf = output_file
+        File output_vcf_index = output_file_idx
+    }
+
     runtime {
         docker: runtime_params.gatk_docker
         bootDiskSizeGb: runtime_params.boot_disk_size
@@ -221,10 +226,5 @@ task CreatePanel {
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
         cpu: runtime_params.cpu
-    }
-
-    output {
-        File output_vcf = output_file
-        File output_vcf_index = output_file_idx
     }
 }
