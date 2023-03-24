@@ -49,7 +49,7 @@ workflow Mutect2_Panel {
     Int gatk_override_size = if defined(gatk_override) then ceil(size(gatk_override, "GB")) else 0
     Int disk_padGB = 1 + gatk_override_size + emergency_extra_diskGB
 
-    Runtime standard_runtime = {
+    GATKRuntime standard_runtime = {
         "gatk_docker": gatk_docker,
         "gatk_override": gatk_override,
         "max_retries": max_retries,
@@ -78,6 +78,7 @@ workflow Mutect2_Panel {
                 individual_id = GetSampleName.sample_name,
                 tumor_bams = [normal_bam.left],
                 tumor_bais = [normal_bam.right],
+                call_covered_regions_only = false,
                 run_contamination_model = false,
                 run_orientation_bias_mixture_model = false,
                 run_variant_filter = false,

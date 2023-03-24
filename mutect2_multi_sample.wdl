@@ -107,7 +107,7 @@ version development
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/eval_intervals.wdl" as eval_i
 
 
-struct Runtime {
+struct GATKRuntime {
     String gatk_docker
     File? gatk_override
     Int max_retries
@@ -172,7 +172,7 @@ workflow MultiSampleMutect2 {
         Boolean mutect2_native_pair_hmm_use_double_precision = true
         Boolean mutect2_use_linked_de_bruijn_graph = true
         Boolean mutect2_recover_all_dangling_branches = true
-        Int mutect2_downstampling_stride = 50  # default 1
+        Int mutect2_downsampling_stride = 50  # default 1
         Int mutect2_max_reads_per_alignment_start = 100  # default: 50
         Int filter_mutect2_max_median_fragment_length_difference = 10000  # default: 10000
         Int filter_mutect2_min_alt_median_base_quality = 20  # default: 20
@@ -199,7 +199,6 @@ workflow MultiSampleMutect2 {
 
         # runtime
         Int scatter_count = 10
-        String bedtools_docker = "staphb/bedtools"
         String gatk_docker = "broadinstitute/gatk"
         File? gatk_override
         Int preemptible = 1
@@ -273,8 +272,7 @@ workflow MultiSampleMutect2 {
     Int m2_output_size = if make_bamout then ceil(tumor_size / scatter_count) else 0
     Int m2_per_scatter_size = 1 + m2_output_size + disk_padGB
 
-    Runtime standard_runtime = {
-        "bedtools_docker": bedtools_docker,
+    GATKRuntime standard_runtime = {
         "gatk_docker": gatk_docker,
         "gatk_override": gatk_override,
         "max_retries": max_retries,
@@ -338,7 +336,6 @@ workflow MultiSampleMutect2 {
                 input_bais = tumor_bais,
                 intervals_bin_length = get_evaluation_intervals_bin_length,
                 intervals_padding = get_evaluation_intervals_padding,
-                bedtools_docker = bedtools_docker,
                 gatk_docker = gatk_docker,
                 gatk_override = gatk_override,
                 preemptible = preemptible,
@@ -395,7 +392,7 @@ workflow MultiSampleMutect2 {
                 native_pair_hmm_use_double_precision = mutect2_native_pair_hmm_use_double_precision,
                 use_linked_de_bruijn_graph = mutect2_use_linked_de_bruijn_graph,
                 recover_all_dangling_branches = mutect2_recover_all_dangling_branches,
-                downsampling_stride = mutect2_downstampling_stride,
+                downsampling_stride = mutect2_downsampling_stride,
                 max_reads_per_alignment_start = mutect2_max_reads_per_alignment_start,
                 m2_extra_args = mutect2_extra_args,
                 gatk_docker = gatk_docker,

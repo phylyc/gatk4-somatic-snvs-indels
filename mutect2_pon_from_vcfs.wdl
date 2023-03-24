@@ -47,7 +47,7 @@ workflow Mutect2_Panel_from_VCFs {
     Int gatk_override_size = if defined(gatk_override) then ceil(size(gatk_override, "GB")) else 0
     Int disk_padGB = 1 + gatk_override_size + emergency_extra_diskGB
 
-    Runtime standard_runtime = {
+    GATKRuntime standard_runtime = {
         "gatk_docker": gatk_docker,
         "gatk_override": gatk_override,
         "max_retries": max_retries,

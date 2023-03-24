@@ -14,14 +14,13 @@ workflow Mutect2 {
         File? normal_bai
 
         # runtime
-        Int scatter_count = 42
         String gatk_docker = "broadinstitute/gatk"
         File? gatk_override
         Int preemptible = 1
         Int max_retries = 2
     }
 
-    Runtime standard_runtime = {
+    GATKRuntime standard_runtime = {
         "gatk_docker": gatk_docker,
         "gatk_override": gatk_override,
         "max_retries": max_retries,
@@ -55,6 +54,8 @@ workflow Mutect2 {
     }
 
     output {
+        Array[File]? covered_intervals = MultiSampleMutect2.covered_intervals
+        File evaluation_intervals = MultiSampleMutect2.evaluation_intervals
         File unfiltered_vcf = MultiSampleMutect2.unfiltered_vcf
         File unfiltered_vcf_idx = MultiSampleMutect2.unfiltered_vcf_idx
         File merged_vcf = MultiSampleMutect2.merged_vcf
