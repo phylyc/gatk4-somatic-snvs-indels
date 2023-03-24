@@ -136,7 +136,7 @@ task ApplyReadFilters {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
 
         echo ""
         echo "    Apply Read Filters that are automatically applied to the data by the Engine before processing by Mutect2. "
@@ -167,7 +167,7 @@ task ApplyReadFilters {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -257,7 +257,7 @@ task BedToIntervalList {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
 
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             BedToIntervalList \
@@ -271,7 +271,7 @@ task BedToIntervalList {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -417,7 +417,7 @@ task GetEvaluationIntervals {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
 
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             IntervalListTools \
@@ -454,7 +454,7 @@ task GetEvaluationIntervals {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
