@@ -4,7 +4,7 @@ version development
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/util.wdl" as util
 
 
-workflow EvaluationIntervals {
+workflow CoverageIntervals {
     input {
         File? interval_list
         Array[File]? interval_lists

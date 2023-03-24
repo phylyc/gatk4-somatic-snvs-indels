@@ -105,7 +105,7 @@ version development
 ## pertaining to the included programs.
 
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/util.wdl" as util    
-import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/eval_intervals.wdl" as eval_i
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/coverage_intervals.wdl" as cov
     
 
 workflow MultiSampleMutect2 {
@@ -312,7 +312,7 @@ workflow MultiSampleMutect2 {
     }
 
     if (call_covered_regions_only) {
-        call eval_i.EvaluationIntervals {
+        call cov.CoverageIntervals {
             input:
                 interval_list = PreprocessIntervals.preprocessed_interval_list,
                 ref_fasta = ref_fasta,
@@ -339,7 +339,7 @@ workflow MultiSampleMutect2 {
 
     File evaluation_interval_list = select_first([
         PreprocessIntervals.preprocessed_interval_list,
-        EvaluationIntervals.evaluation_intervals
+        CoverageIntervals.evaluation_intervals
     ])
 
     call SplitIntervals {
@@ -794,7 +794,7 @@ workflow MultiSampleMutect2 {
     }
 
     output {
-        Array[File]? covered_intervals = EvaluationIntervals.covered_intervals
+        Array[File]? covered_intervals = CoverageIntervals.covered_intervals
         File evaluation_intervals = evaluation_interval_list
         File unfiltered_vcf = MergeVariantCallVCFs.merged_vcf
         File unfiltered_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx
