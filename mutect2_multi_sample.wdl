@@ -274,6 +274,7 @@ workflow MultiSampleMutect2 {
     Int m2_per_scatter_size = 1 + m2_output_size + disk_padGB
 
     Runtime standard_runtime = {
+        "bedtools_docker": bedtools_docker,
         "gatk_docker": gatk_docker,
         "gatk_override": gatk_override,
         "max_retries": max_retries,
