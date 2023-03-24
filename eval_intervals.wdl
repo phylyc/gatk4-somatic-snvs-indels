@@ -1,19 +1,8 @@
 version development
 
 
-struct Runtime {
-    String bedtools_docker
-    String gatk_docker
-    File? gatk_override
-    Int max_retries
-    Int preemptible
-    Int cpu
-    Int machine_mem
-    Int command_mem
-    Int runtime_minutes
-    Int disk
-    Int boot_disk_size
-}
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/util.wdl" as util
+
 
 workflow EvaluationIntervals {
     input {
@@ -52,9 +41,8 @@ workflow EvaluationIntervals {
     }
 
     Runtime standard_runtime = {
-        "bedtools_docker": bedtools_docker,
-        "gatk_docker": gatk_docker,
-        "gatk_override": gatk_override,
+        "docker": gatk_docker,
+        "jar_override": gatk_override,
         "max_retries": max_retries,
         "preemptible": preemptible,
         "cpu": 1,
@@ -87,6 +75,7 @@ workflow EvaluationIntervals {
                 input_bai = ApplyReadFilters.bai,
                 min_read_depth_threshold = min_read_depth_threshold,
                 runtime_params = standard_runtime,
+                bedtools_docker = bedtools_docker,
                 memoryMB = mem_get_genome_coverage,
                 runtime_minutes = time_startup + time_get_genome_coverage
         }
@@ -198,6 +187,7 @@ task GetGenomeCoverage {
         Int min_read_depth_threshold = 1
 
         Runtime runtime_params
+        String? bedtools_docker = "staphb/bedtools"
         Int? memoryMB
         Int? runtime_minutes
     }
@@ -236,7 +226,7 @@ task GetGenomeCoverage {
     }
 
     runtime {
-        docker: runtime_params.bedtools_docker
+        docker: select_first([bedtools_docker, runtime_params.docker])
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
