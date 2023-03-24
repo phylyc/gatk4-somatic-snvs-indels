@@ -15,6 +15,7 @@ version development
 # import "mutect2_multi_sample.wdl" as msm2
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2_multi_sample.wdl" as msm2
 
+
 workflow Mutect2_Panel {
     input {
         File? interval_list
@@ -49,9 +50,9 @@ workflow Mutect2_Panel {
     Int gatk_override_size = if defined(gatk_override) then ceil(size(gatk_override, "GB")) else 0
     Int disk_padGB = 1 + gatk_override_size + emergency_extra_diskGB
 
-    GATKRuntime standard_runtime = {
-        "gatk_docker": gatk_docker,
-        "gatk_override": gatk_override,
+    Runtime standard_runtime = {
+        "docker": gatk_docker,
+        "jar_override": gatk_override,
         "max_retries": max_retries,
         "preemptible": preemptible,
         "cpu": 1,
@@ -189,7 +190,7 @@ task CreatePanel {
 
     command {
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
 
         gatk --java-options "-Xmx~{select_first([command_memMB, runtime_params.command_mem])}m" \
             GenomicsDBImport \
@@ -219,7 +220,7 @@ task CreatePanel {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: memoryMB + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])

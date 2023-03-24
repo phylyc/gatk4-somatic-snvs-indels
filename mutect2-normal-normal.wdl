@@ -27,6 +27,7 @@ version development
 # import "mutect2.wdl" as m2
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2.wdl" as m2
 
+
 workflow Mutect2NormalNormal {
 	input {
 		File? interval_list

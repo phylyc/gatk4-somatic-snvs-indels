@@ -18,6 +18,7 @@ version development
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2_multi_sample.wdl" as msm2
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2_pon.wdl" as m2pon
 
+
 workflow Mutect2_Panel_from_VCFs {
     input {
         File? interval_list
@@ -47,9 +48,9 @@ workflow Mutect2_Panel_from_VCFs {
     Int gatk_override_size = if defined(gatk_override) then ceil(size(gatk_override, "GB")) else 0
     Int disk_padGB = 1 + gatk_override_size + emergency_extra_diskGB
 
-    GATKRuntime standard_runtime = {
-        "gatk_docker": gatk_docker,
-        "gatk_override": gatk_override,
+    Runtime standard_runtime = {
+        "docker": gatk_docker,
+        "jar_override": gatk_override,
         "max_retries": max_retries,
         "preemptible": preemptible,
         "cpu": 1,

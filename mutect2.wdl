@@ -5,6 +5,7 @@ version development
 #import "mutect2_multi_sample.wdl" as msm2
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/mutect2_multi_sample.wdl" as msm2
 
+
 workflow Mutect2 {
     input {
         String? individual_id
@@ -20,9 +21,9 @@ workflow Mutect2 {
         Int max_retries = 2
     }
 
-    GATKRuntime standard_runtime = {
-        "gatk_docker": gatk_docker,
-        "gatk_override": gatk_override,
+    Runtime standard_runtime = {
+        "docker": gatk_docker,
+        "jar_override": gatk_override,
         "max_retries": max_retries,
         "preemptible": preemptible,
         "cpu": 1,

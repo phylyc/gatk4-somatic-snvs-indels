@@ -104,21 +104,9 @@ version development
 ## pages at https://hub.docker.com/r/broadinstitute/* for detailed licensing information
 ## pertaining to the included programs.
 
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/util.wdl" as util    
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/eval_intervals.wdl" as eval_i
-
-
-struct GATKRuntime {
-    String gatk_docker
-    File? gatk_override
-    Int max_retries
-    Int preemptible
-    Int cpu
-    Int machine_mem
-    Int command_mem
-    Int runtime_minutes
-    Int disk
-    Int boot_disk_size
-}
+    
 
 workflow MultiSampleMutect2 {
     input {
@@ -272,9 +260,9 @@ workflow MultiSampleMutect2 {
     Int m2_output_size = if make_bamout then ceil(tumor_size / scatter_count) else 0
     Int m2_per_scatter_size = 1 + m2_output_size + disk_padGB
 
-    GATKRuntime standard_runtime = {
-        "gatk_docker": gatk_docker,
-        "gatk_override": gatk_override,
+    Runtime standard_runtime = {
+        "docker": gatk_docker,
+        "jar_override": gatk_override,
         "max_retries": max_retries,
         "preemptible": preemptible,
         "cpu": 1,
@@ -855,7 +843,7 @@ task PreprocessIntervals {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             PreprocessIntervals \
             -R '~{ref_fasta}' \
@@ -873,7 +861,7 @@ task PreprocessIntervals {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -916,7 +904,7 @@ task SplitIntervals {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
         mkdir interval-files
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             SplitIntervals \
@@ -932,7 +920,7 @@ task SplitIntervals {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -958,7 +946,7 @@ task GetSampleName {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             GetSampleName \
             -I '~{bam}' \
@@ -970,7 +958,7 @@ task GetSampleName {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -1128,7 +1116,7 @@ task MergeMutectStats {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             MergeMutectStats \
             ~{sep="' " prefix("-stats '", stats)}' \
@@ -1140,7 +1128,7 @@ task MergeMutectStats {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -1183,7 +1171,7 @@ task LearnReadOrientationModel {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
 
         if ~{f1r2_counts_empty} ; then
             echo "ERROR: f1r2_counts_tar_gz must be supplied and non empty."
@@ -1201,7 +1189,7 @@ task LearnReadOrientationModel {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -1246,7 +1234,7 @@ task GetPileupSummaries {
 
     command <<<
         set +e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
 
         if ~{!defined(variants_for_contamination)} ; then
             echo "ERROR: variants_for_contamination must be supplied."
@@ -1273,7 +1261,7 @@ task GetPileupSummaries {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -1303,7 +1291,7 @@ task GatherPileupSummaries {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             GatherPileupSummaries \
             --sequence-dictionary '~{ref_dict}' \
@@ -1316,7 +1304,7 @@ task GatherPileupSummaries {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -1358,7 +1346,7 @@ task CalculateContamination {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             CalculateContamination \
             --input '~{tumor_pileups}' \
@@ -1373,7 +1361,7 @@ task CalculateContamination {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -1439,7 +1427,7 @@ task FilterMutectCalls {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             FilterMutectCalls \
             --reference '~{ref_fasta}' \
@@ -1464,7 +1452,7 @@ task FilterMutectCalls {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -1521,7 +1509,7 @@ task FilterAlignmentArtifacts {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
 
         if ~{!defined(bwa_mem_index_image)} ; then
             echo "ERROR: bwa_mem_index_image must be supplied."
@@ -1548,7 +1536,7 @@ task FilterAlignmentArtifacts {
     }
 
     runtime {
-        docker: select_first([gatk_docker, runtime_params.gatk_docker])
+        docker: select_first([gatk_docker, runtime_params.docker])
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -1609,7 +1597,7 @@ task SelectVariants {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             SelectVariants \
             ~{"-R '" + ref_fasta + "'"} \
@@ -1659,7 +1647,7 @@ task SelectVariants {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -1695,7 +1683,7 @@ task MergeVCFs {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             MergeVcfs \
             ~{sep="' " prefix("-I '", input_vcfs)}' \
@@ -1708,7 +1696,7 @@ task MergeVCFs {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: runtime_minutes
@@ -1744,7 +1732,7 @@ task MergeBamOuts {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             GatherBamFiles \
             ~{sep="' " prefix("-I '", m2_bam_outs)}' \
@@ -1773,7 +1761,7 @@ task MergeBamOuts {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -1826,7 +1814,7 @@ task CNNScoreVariants {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             CNNScoreVariants \
             -I '~{tumor_bam}' \
@@ -1843,7 +1831,7 @@ task CNNScoreVariants {
   	}
 
     runtime {
-        docker: select_first([gatk_docker, runtime_params.gatk_docker])
+        docker: select_first([gatk_docker, runtime_params.docker])
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
@@ -1916,7 +1904,7 @@ task Funcotate {
 
     command <<<
         set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
 
         # =======================================
         # Hack to validate the WDL inputs:
@@ -1989,7 +1977,7 @@ task Funcotate {
     }
 
     runtime {
-        docker: runtime_params.gatk_docker
+        docker: runtime_params.docker
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
