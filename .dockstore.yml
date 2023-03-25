@@ -4,7 +4,8 @@ workflows:
     subclass: WDL
     publish: true
     primaryDescriptorPath: mutect2_multi_sample.wdl
-    testParameterFiles: mutect2_multi_sample.inputs.json
+    testParameterFiles:
+      - mutect2_multi_sample.inputs.json
     authors:
       - orcid: 0000-0001-9584-9135
 
@@ -12,6 +13,8 @@ workflows:
     subclass: WDL
     publish: true
     primaryDescriptorPath: mutect2.wdl
+    testParameterFiles:
+      - mutect2.inputs.json
     authors:
       - orcid: 0000-0001-9584-9135
 
