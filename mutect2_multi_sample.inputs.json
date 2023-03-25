@@ -4,7 +4,7 @@
   "MultiSampleMutect2.tumor_bais":"${this.tumor_bais}",
   "MultiSampleMutect2.normal_bams":"${this.normal_bams}",
   "MultiSampleMutect2.normal_bais":"${this.normal_bais}",
-  "MultiSampleMutect2.interval_list":"${workspace.WGS_intervals}",
+  "MultiSampleMutect2.interval_list":"${workspace.referenceData_intervals_WGS_intervals}",
   "MultiSampleMutect2.ref_dict":"${workspace.referenceData_b37Human_ref_dict}",
   "MultiSampleMutect2.ref_fasta":"${workspace.referenceData_b37Human_ref_fasta}",
   "MultiSampleMutect2.ref_fasta_index":"${workspace.referenceData_b37Human_ref_fasta_index}",
