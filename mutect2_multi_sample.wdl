@@ -160,6 +160,7 @@ workflow MultiSampleMutect2 {
         Boolean mutect2_native_pair_hmm_use_double_precision = true
         Boolean mutect2_use_linked_de_bruijn_graph = true
         Boolean mutect2_recover_all_dangling_branches = true
+        Boolean mutect2_pileup_detection = true
         Int mutect2_downsampling_stride = 50  # default 1
         Int mutect2_max_reads_per_alignment_start = 100  # default: 50
         Int filter_mutect2_max_median_fragment_length_difference = 10000  # default: 10000
@@ -380,6 +381,7 @@ workflow MultiSampleMutect2 {
                 native_pair_hmm_use_double_precision = mutect2_native_pair_hmm_use_double_precision,
                 use_linked_de_bruijn_graph = mutect2_use_linked_de_bruijn_graph,
                 recover_all_dangling_branches = mutect2_recover_all_dangling_branches,
+                pileup_detection = mutect2_pileup_detection,
                 downsampling_stride = mutect2_downsampling_stride,
                 max_reads_per_alignment_start = mutect2_max_reads_per_alignment_start,
                 m2_extra_args = mutect2_extra_args,
@@ -993,6 +995,7 @@ task VariantCall {
         Boolean native_pair_hmm_use_double_precision = true
         Boolean use_linked_de_bruijn_graph = true
         Boolean recover_all_dangling_branches = true
+        Boolean pileup_detection = true
 
         # The linked de-Bruijn graph implementation has trouble calling variants
         # in complex regions. Reducing the downsampling by increasing the following
@@ -1066,7 +1069,7 @@ task VariantCall {
             ~{true="--genotype-pon-sites true" false="" genotype_pon_sites} \
             ~{true="--linked-de-bruijn-graph true" false="" use_linked_de_bruijn_graph} \
             ~{true="--recover-all-dangling-branches true" false="" recover_all_dangling_branches} \
-            --pileup-detection true \
+            ~{true="--pileup-detection true" false="" pileup_detection} \
             --smith-waterman FASTEST_AVAILABLE \
             --pair-hmm-implementation FASTEST_AVAILABLE \
             ~{true="--native-pair-hmm-use-double-precision true" false="" native_pair_hmm_use_double_precision} \
