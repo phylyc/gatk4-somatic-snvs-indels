@@ -1,0 +1,44 @@
+version: 1.2
+workflows:
+  - name: MultiSampleMutect2
+    subclass: WDL
+    publish: true
+    primaryDescriptorPath: mutect2_multi_sample.wdl
+    testParameterFiles: mutect2_multi_sample.inputs.json
+    authors:
+      - orcid: 0000-0001-9584-9135
+
+  - name: Mutect2
+    subclass: WDL
+    publish: true
+    primaryDescriptorPath: mutect2.wdl
+    authors:
+      - orcid: 0000-0001-9584-9135
+
+  - name: CoverageIntervals
+    subclass: WDL
+    publish: true
+    primaryDescriptorPath: coverage_intervals.wdl
+    authors:
+      - orcid: 0000-0001-9584-9135
+
+  - name: Mutect2_PoN
+    subclass: WDL
+    publish: true
+    primaryDescriptorPath: mutect2_pon.wdl
+    authors:
+      - orcid: 0000-0001-9584-9135
+
+  - name: Mutect2_PoN_from_file
+    subclass: WDL
+    publish: true
+    primaryDescriptorPath: mutect2_pon_from_file.wdl
+    authors:
+      - orcid: 0000-0001-9584-9135
+
+  - name: Mutect2_PoN_from_vcfs
+    subclass: WDL
+    publish: true
+    primaryDescriptorPath: mutect2_pon_from_vcfs.wdl
+    authors:
+      - orcid: 0000-0001-9584-9135
