@@ -18,6 +18,7 @@ workflow CoverageIntervals {
         Array[File]+ input_bais
 
         # arguments
+        Boolean paired_end = false
         Int min_read_depth_threshold = 1
         Int intervals_bin_length = 0
         Int intervals_padding = 0
@@ -74,6 +75,7 @@ workflow CoverageIntervals {
                 input_bam = ApplyReadFilters.bam,
                 input_bai = ApplyReadFilters.bai,
                 min_read_depth_threshold = min_read_depth_threshold,
+                paired_end = paired_end,
                 runtime_params = standard_runtime,
                 bedtools_docker = bedtools_docker,
                 memoryMB = mem_get_genome_coverage,
@@ -185,6 +187,7 @@ task GetGenomeCoverage {
         File input_bai
 
         Int min_read_depth_threshold = 1
+        Boolean paired_end = false
 
         Runtime runtime_params
         String? bedtools_docker = "staphb/bedtools"
@@ -193,6 +196,7 @@ task GetGenomeCoverage {
     }
 
     Int diskGB = ceil(size(input_bam, "GB")) + runtime_params.disk
+    Int max = if paired_end then ceil(min_read_depth_threshold / 2) else min_read_depth_threshold
 
     String filtered_bam = basename(input_bam, ".bam") + ".filtered.bam"
     String covered_regions_bed = sample_name + ".coveraged_regions.bed"
@@ -213,10 +217,10 @@ task GetGenomeCoverage {
 
         bedtools genomecov \
             -ibam '~{input_bam}' \
-            -max ~{min_read_depth_threshold} \
+            -max ~{max} \
             -bg \
-            -pc \
-        | awk '~{dollar}4>=~{min_read_depth_threshold}' \
+            ~{true="-pc " false="" paired_end} \
+        | awk '~{dollar}4>=~{max}' \
         | bedtools merge -c 4 -o min -d 1 -i stdin \
         > '~{covered_regions_bed}'
     >>>

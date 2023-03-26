@@ -242,6 +242,8 @@ workflow MultiSampleMutect2 {
         Int cnn_scoring_cpu = 1
     }
 
+    # Todo: Add force-calling option
+
     Array[File] non_optional_normal_bams = select_first([normal_bams, []])
     Array[File] non_optional_normal_bais = select_first([normal_bais, []])
 
@@ -325,6 +327,7 @@ workflow MultiSampleMutect2 {
                 input_bais = tumor_bais,
                 intervals_bin_length = get_evaluation_intervals_bin_length,
                 intervals_padding = get_evaluation_intervals_padding,
+                min_read_depth_threshold = min_read_depth_threshold,
                 gatk_docker = gatk_docker,
                 gatk_override = gatk_override,
                 preemptible = preemptible,
