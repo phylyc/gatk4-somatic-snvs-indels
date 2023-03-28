@@ -8,6 +8,7 @@ workflow CoverageIntervals {
     input {
         File? interval_list
         Array[File]? interval_lists
+        File? intervals_for_coverage
         File ref_fasta
         File ref_fasta_index
         File ref_dict
@@ -37,6 +38,7 @@ workflow CoverageIntervals {
 
         # runtime assignments in minutes (for HPC cluster)
         Int time_startup = 10
+        Int time_apply_read_filters = 120
         Int time_get_genome_coverage = 60
         Int time_get_evaluation_intervals = 60
     }
@@ -47,8 +49,8 @@ workflow CoverageIntervals {
         "max_retries": max_retries,
         "preemptible": preemptible,
         "cpu": 1,
-        "machine_mem": 2024,
-        "command_mem": 2024,
+        "machine_mem": 4096,
+        "command_mem": 4096,
         "runtime_minutes": 60,
         "disk": 10 + emergency_extra_diskGB,
         "boot_disk_size": 12  # needs to be > 10
@@ -63,7 +65,9 @@ workflow CoverageIntervals {
             input:
                 input_bam = bam,
                 input_bai = bai,
-                runtime_params = standard_runtime
+                interval_list = intervals_for_coverage,
+                runtime_params = standard_runtime,
+                runtime_minutes = time_startup + time_apply_read_filters
         }
 
         call GetGenomeCoverage {
@@ -116,6 +120,7 @@ workflow CoverageIntervals {
 
 task ApplyReadFilters {
     input {
+        File? interval_list
         File input_bam
         File input_bai
 
@@ -148,6 +153,7 @@ task ApplyReadFilters {
             PrintReads \
             -I '~{input_bam}' \
             -O '~{filtered_bam}' \
+            ~{"-L '" + interval_list + "'"} \
             --read-filter NonChimericOriginalAlignmentReadFilter \
             --read-filter NotSecondaryAlignmentReadFilter \
             --read-filter GoodCigarReadFilter \
@@ -390,6 +396,7 @@ task GetEvaluationIntervals {
         File? interval_list
         Array[File]? interval_lists
         Array[File]+ covered_intervals
+        File? interval_blacklist
         File ref_fasta
         File ref_fasta_index
         File ref_dict
@@ -447,6 +454,7 @@ task GetEvaluationIntervals {
             PreprocessIntervals \
             -R '~{ref_fasta}' \
             -L '~{intersection_intervals}' \
+            ~{"-XL '" + interval_blacklist + "'"} \
             --bin-length ~{bin_length} \
             --padding ~{padding} \
             --interval-merging-rule OVERLAPPING_ONLY \
