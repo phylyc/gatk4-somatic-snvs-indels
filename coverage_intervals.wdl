@@ -132,7 +132,7 @@ task ApplyReadFilters {
         Int? runtime_minutes
     }
 
-    Int diskGB = ceil(size(input_bam, "GB")) + runtime_params.disk
+    Int diskGB = ceil(1.5 * size(input_bam, "GB")) + runtime_params.disk
     String filtered_bam = basename(input_bam, ".bam") + ".filtered.bam"
     String filtered_bai = basename(input_bai, ".bai") + ".filtered.bai"
 
