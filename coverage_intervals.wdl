@@ -34,7 +34,7 @@ workflow CoverageIntervals {
 
         # memory assignments in MB
         Int mem_get_genome_coverage = 8192
-        Int mem_get_evaluation_intervals = 4096
+        Int mem_get_evaluation_intervals = 8192
 
         # runtime assignments in minutes (for HPC cluster)
         Int time_startup = 10
@@ -52,7 +52,7 @@ workflow CoverageIntervals {
         "machine_mem": 4096,
         "command_mem": 4096,
         "runtime_minutes": 60,
-        "disk": 10 + emergency_extra_diskGB,
+        "disk": 3 + emergency_extra_diskGB,
         "boot_disk_size": 12  # needs to be > 10
     }
 
@@ -132,7 +132,7 @@ task ApplyReadFilters {
         Int? runtime_minutes
     }
 
-    Int diskGB = ceil(1.5 * size(input_bam, "GB")) + runtime_params.disk
+    Int diskGB = ceil(1.3 * size(input_bam, "GB")) + runtime_params.disk
     String filtered_bam = basename(input_bam, ".bam") + ".filtered.bam"
     String filtered_bai = basename(input_bai, ".bai") + ".filtered.bai"
 
@@ -201,7 +201,7 @@ task GetGenomeCoverage {
         Int? runtime_minutes
     }
 
-    Int diskGB = ceil(size(input_bam, "GB")) + runtime_params.disk
+    Int diskGB = ceil(1.3 * size(input_bam, "GB")) + runtime_params.disk
     Int max = if paired_end then ceil(min_read_depth_threshold / 2) else min_read_depth_threshold
 
     String filtered_bam = basename(input_bam, ".bam") + ".filtered.bam"
@@ -309,7 +309,7 @@ task BedToIntervalList {
 #        Int? runtime_minutes
 #    }
 #
-#    Int diskGB = ceil(size(input_bam, "GB")) + runtime_params.disk
+#    Int diskGB = ceil(1.2 * size(input_bam, "GB")) + runtime_params.disk
 #
 #    String filtered_bam = basename(input_bam, ".bam") + ".filtered.bam"
 #    String covered_regions_bed = sample_name + ".coveraged_regions.bed"
@@ -319,6 +319,8 @@ task BedToIntervalList {
 ##        ref_fasta: {localization_optional: true}
 ##        ref_fasta_index: {localization_optional: true}
 ##        ref_dict: {localization_optional: true}
+#        input_bam: {localization_optional: true}
+#        input_bai: {localization_optional: true}
 #    }
 #
 #    String dollar = "$"
@@ -340,8 +342,6 @@ task BedToIntervalList {
 #            --read-filter GoodCigarReadFilter \
 #            --read-filter NonZeroReferenceLengthAlignmentReadFilter \
 #            --read-filter PassesVendorQualityCheckReadFilter \
-#            --read-filter ReadLengthReadFilter \
-#                --max-read-length 1000 \
 #            --read-filter MappedReadFilter \
 #            --read-filter MappingQualityAvailableReadFilter \
 #            --read-filter NotDuplicateReadFilter \
@@ -412,6 +412,8 @@ task GetEvaluationIntervals {
         Int? runtime_minutes
     }
 
+    Int diskGB = ceil(size(interval_list, "GB")) + ceil(2 * size(interval_lists, "GB")) + ceil(2 * size(covered_intervals, "GB")) + runtime_params.disk
+
     String merged_input_intervals = collection_name + ".merged_input.interval_list"
     String merged_covered_regions = collection_name + ".merged_covered_regions.interval_list"
     String intersection_intervals = collection_name + ".merged_input.CAP.merged_covered_regions.interval_list"
@@ -470,7 +472,7 @@ task GetEvaluationIntervals {
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
-        disks: "local-disk " + runtime_params.disk + " HDD"
+        disks: "local-disk " + diskGB + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
         cpu: runtime_params.cpu
