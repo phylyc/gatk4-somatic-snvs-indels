@@ -49,10 +49,10 @@ workflow CoverageIntervals {
         "max_retries": max_retries,
         "preemptible": preemptible,
         "cpu": 1,
-        "machine_mem": 4096,
-        "command_mem": 4096,
+        "machine_mem": 8192,
+        "command_mem": 8192 - 256,
         "runtime_minutes": 60,
-        "disk": 3 + emergency_extra_diskGB,
+        "disk": 10 + emergency_extra_diskGB,
         "boot_disk_size": 12  # needs to be > 10
     }
 
