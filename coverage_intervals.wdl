@@ -205,7 +205,7 @@ task GetGenomeCoverage {
     Int max = if paired_end then ceil(min_read_depth_threshold / 2) else min_read_depth_threshold
 
     String filtered_bam = basename(input_bam, ".bam") + ".filtered.bam"
-    String covered_regions_bed = sample_name + ".coveraged_regions.bed"
+    String covered_regions_bed = sample_name + ".covered_regions.bed"
     String interval_list_file = basename(covered_regions_bed, ".bed") + ".interval_list"
 
     parameter_meta {
