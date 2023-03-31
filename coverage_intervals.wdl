@@ -412,7 +412,12 @@ task GetEvaluationIntervals {
         Int? runtime_minutes
     }
 
-    Int diskGB = ceil(size(interval_list, "GB")) + ceil(2 * size(interval_lists, "GB")) + ceil(2 * size(covered_intervals, "GB")) + runtime_params.disk
+    Int diskGB = (
+        if defined(interval_list) then ceil(size(interval_list, "GB")) else 0
+        + if defined(interval_lists) then ceil(2 * size(interval_lists, "GB")) else 0
+        + ceil(2 * size(covered_intervals, "GB"))
+        + runtime_params.disk
+    )
 
     String merged_input_intervals = collection_name + ".merged_input.interval_list"
     String merged_covered_regions = collection_name + ".merged_covered_regions.interval_list"
