@@ -25,6 +25,13 @@ workflows:
     authors:
       - orcid: 0000-0001-9584-9135
 
+  - name: SummarizeCoverageIntervalsInBam
+    subclass: WDL
+    publish: true
+    primaryDescriptorPath: summarize_coverage_intervals_in_bam.wdl
+    authors:
+      - orcid: 0000-0001-9584-9135
+
   - name: Mutect2_PoN
     subclass: WDL
     publish: true
