@@ -1753,12 +1753,12 @@ task MergeBamOuts {
             -I unsorted.out.bam \
             -O '~{output_vcf_name}.out.bam' \
             --SORT_ORDER coordinate \
-            -VALIDATION_STRINGENCY LENIENT
+            --VALIDATION_STRINGENCY LENIENT
 
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             BuildBamIndex \
             -I '~{output_vcf_name}.out.bam' \
-            -VALIDATION_STRINGENCY LENIENT
+            --VALIDATION_STRINGENCY LENIENT
     >>>
 
     output {
