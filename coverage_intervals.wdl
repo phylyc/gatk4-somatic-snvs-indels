@@ -413,7 +413,7 @@ task GetEvaluationIntervals {
         Int diskGB = 0
     }
 
-    Int diskGB = (
+    Int diskspaceGB = (
         if defined(interval_list) then ceil(size(interval_list, "GB")) else 0
         + if defined(interval_lists) then ceil(2 * size(select_first([interval_lists, []]), "GB")) else 0
         + ceil(2 * size(covered_intervals, "GB"))
@@ -479,7 +479,7 @@ task GetEvaluationIntervals {
         bootDiskSizeGb: runtime_params.boot_disk_size
         memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
         runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
-        disks: "local-disk " + diskGB + " HDD"
+        disks: "local-disk " + diskspaceGB + " HDD"
         preemptible: runtime_params.preemptible
         maxRetries: runtime_params.max_retries
         cpu: runtime_params.cpu
