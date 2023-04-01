@@ -410,14 +410,14 @@ task GetEvaluationIntervals {
         Runtime runtime_params
         Int? memoryMB
         Int? runtime_minutes
-        Int? diskGB
+        Int diskGB = 0
     }
 
     Int diskGB = (
         if defined(interval_list) then ceil(size(interval_list, "GB")) else 0
         + if defined(interval_lists) then ceil(2 * size(select_first([interval_lists, []]), "GB")) else 0
         + ceil(2 * size(covered_intervals, "GB"))
-        + if defined(diskGB) then diskGB else 0
+        + diskGB
         + runtime_params.disk
     )
 
