@@ -292,105 +292,6 @@ task BedToIntervalList {
     }
 }
 
-#task GetGenomeCoverage {
-#    input {
-#        File ref_fasta
-#        File ref_fasta_index
-#        File ref_dict
-#
-#        String? sample_name
-#        File input_bam
-#        File input_bai
-#
-#        Int min_read_depth_threshold = 1
-#
-#        Runtime runtime_params
-#        Int? memoryMB
-#        Int? runtime_minutes
-#    }
-#
-#    Int diskGB = ceil(1.2 * size(input_bam, "GB")) + runtime_params.disk
-#
-#    String filtered_bam = basename(input_bam, ".bam") + ".filtered.bam"
-#    String covered_regions_bed = sample_name + ".coveraged_regions.bed"
-#    String interval_list_file = basename(covered_regions_bed, ".bed") + ".interval_list"
-#
-#    parameter_meta {
-##        ref_fasta: {localization_optional: true}
-##        ref_fasta_index: {localization_optional: true}
-##        ref_dict: {localization_optional: true}
-#        input_bam: {localization_optional: true}
-#        input_bai: {localization_optional: true}
-#    }
-#
-#    String dollar = "$"
-#
-#    command <<<
-#        set -e
-#        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
-#
-#        echo "..."
-#        echo "    Apply Read Filters that are automatically applied to the data by the Engine before processing by Mutect2:"
-#        echo "..."
-#
-#        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
-#            PrintReads \
-#            -I '~{input_bam}' \
-#            -O '~{filtered_bam}' \
-#            --read-filter NonChimericOriginalAlignmentReadFilter \
-#            --read-filter NotSecondaryAlignmentReadFilter \
-#            --read-filter GoodCigarReadFilter \
-#            --read-filter NonZeroReferenceLengthAlignmentReadFilter \
-#            --read-filter PassesVendorQualityCheckReadFilter \
-#            --read-filter MappedReadFilter \
-#            --read-filter MappingQualityAvailableReadFilter \
-#            --read-filter NotDuplicateReadFilter \
-#            --read-filter MappingQualityReadFilter \
-#            --read-filter MappingQualityNotZeroReadFilter \
-#            --read-filter WellformedReadFilter
-#
-#        echo "..."
-#        echo "    Collecting BEDGRAPH summaries of feature coverage"
-#        echo "    and removing regions below ~{min_read_depth_threshold} read depth:"
-#        echo "..."
-#
-#        bedtools genomecov \
-#            -ibam '~{filtered_bam}' \
-#            -max ~{min_read_depth_threshold} \
-#            -bg \
-#            -pc \
-#        | awk '~{dollar}4>=~{min_read_depth_threshold}' \
-#        | bedtools merge -c 4 -o min -d 1 -i stdin \
-#        > '~{covered_regions_bed}'
-#
-#        echo "..."
-#        echo "    Create interval_list from bed file:"
-#        echo "..."
-#
-#        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
-#            BedToIntervalList \
-#            -I '~{covered_regions_bed}' \
-#            -O '~{interval_list_file}' \
-#            -SD '~{ref_dict}'
-#    >>>
-#
-#    output {
-##        File covered_regions = covered_regions_bed
-#        File interval_list = interval_list_file
-#    }
-#
-#    runtime {
-#        docker: runtime_params.gatk_docker
-#        bootDiskSizeGb: runtime_params.boot_disk_size
-#        memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-#        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
-#        disks: "local-disk " + diskGB + " HDD"
-#        preemptible: runtime_params.preemptible
-#        maxRetries: runtime_params.max_retries
-#        cpu: runtime_params.cpu
-#    }
-#}
-
 task GetEvaluationIntervals {
     input {
         File? interval_list
@@ -414,8 +315,8 @@ task GetEvaluationIntervals {
     }
 
     Int diskspaceGB = (
-        if defined(interval_list) then ceil(size(interval_list, "GB")) else 0
-        + if defined(interval_lists) then ceil(2 * size(select_first([interval_lists, []]), "GB")) else 0
+        (if defined(interval_list) then ceil(size(interval_list, "GB")) else 0)
+        + (if defined(interval_lists) then ceil(2 * size(select_first([interval_lists, []]), "GB")) else 0)
         + ceil(2 * size(covered_intervals, "GB"))
         + diskGB
         + runtime_params.disk
@@ -485,3 +386,113 @@ task GetEvaluationIntervals {
         cpu: runtime_params.cpu
     }
 }
+
+# IF YOU CAN SUPPLY A DOCKER IMAGE CONTAINING BOTH GATK AND BEDTOOLS, COMBINING
+# THE THREE TASKS IN THE SCATTER INTO ONE CAN SAVE SOME COMPUTE RESOURCES!
+#
+#task GetGenomeCoverageIntervals {
+#    input {
+#        File ref_fasta
+#        File ref_fasta_index
+#        File ref_dict
+#        File? interval_list
+#
+#        Array[String]? read_filters
+#        String? print_reads_extra_args
+#
+#        String? sample_name
+#        File input_bam
+#        File input_bai
+#
+#        Int min_read_depth_threshold = 1
+#        Boolean paired_end = false
+#
+#        Runtime runtime_params
+#        Int? memoryMB
+#        Int? runtime_minutes
+#    }
+#
+#    Int diskGB = ceil(1.2 * size(input_bam, "GB")) + runtime_params.disk
+#    Int max = if paired_end then ceil(min_read_depth_threshold / 2) else min_read_depth_threshold
+#
+#    String filtered_bam = basename(input_bam, ".bam") + ".filtered.bam"
+#    String covered_regions_bed = sample_name + ".coveraged_regions.bed"
+#    String interval_list_file = basename(covered_regions_bed, ".bed") + ".interval_list"
+#
+#    parameter_meta {
+##        ref_fasta: {localization_optional: true}
+##        ref_fasta_index: {localization_optional: true}
+##        ref_dict: {localization_optional: true}
+#        input_bam: {localization_optional: true}
+#        input_bai: {localization_optional: true}
+#    }
+#
+#    String dollar = "$"
+#
+#    command <<<
+#        set -e
+#        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
+#
+#        echo "..."
+#        echo "    Apply Read Filters that are automatically applied to the data by the Engine before processing by Mutect2:"
+#        echo "..."
+#
+#        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
+#            PrintReads \
+#            -I '~{input_bam}' \
+#            -O '~{filtered_bam}' \
+#            ~{"-L '" + interval_list + "'"} \
+#            --read-filter NonChimericOriginalAlignmentReadFilter \
+#            --read-filter NotSecondaryAlignmentReadFilter \
+#            --read-filter GoodCigarReadFilter \
+#            --read-filter NonZeroReferenceLengthAlignmentReadFilter \
+#            --read-filter PassesVendorQualityCheckReadFilter \
+#            --read-filter MappedReadFilter \
+#            --read-filter MappingQualityAvailableReadFilter \
+#            --read-filter NotDuplicateReadFilter \
+#            --read-filter MappingQualityReadFilter \
+#            --read-filter MappingQualityNotZeroReadFilter \
+#            --read-filter WellformedReadFilter \
+#            ~{true="--read-filter " false="" defined(read_filters)}~{default="" sep=" --read-filter " read_filters} \
+#            ~{print_reads_extra_args}
+#
+#        echo "..."
+#        echo "    Collecting BEDGRAPH summaries of feature coverage"
+#        echo "    and removing regions below ~{min_read_depth_threshold} read depth:"
+#        echo "..."
+#
+#        bedtools genomecov \
+#            -ibam '~{filtered_bam}' \
+#            -max ~{max} \
+#            -bg \
+#            ~{true="-pc " false="" paired_end} \
+#        | awk '~{dollar}4>=~{max}' \
+#        | bedtools merge -c 4 -o min -d 1 -i stdin \
+#        > '~{covered_regions_bed}'
+#
+#        echo "..."
+#        echo "    Create interval_list from bed file:"
+#        echo "..."
+#
+#        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
+#            BedToIntervalList \
+#            -I '~{covered_regions_bed}' \
+#            -O '~{interval_list_file}' \
+#            -SD '~{ref_dict}'
+#    >>>
+#
+#    output {
+#        File interval_list = interval_list_file
+#    }
+#
+#    runtime {
+#        docker: runtime_params.docker
+#        bootDiskSizeGb: runtime_params.boot_disk_size
+#        memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
+#        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
+#        disks: "local-disk " + diskGB + " HDD"
+#        preemptible: runtime_params.preemptible
+#        maxRetries: runtime_params.max_retries
+#        cpu: runtime_params.cpu
+#    }
+#}
