@@ -21,7 +21,6 @@ workflow Mutect2 {
         File? normal_bai
 
         # workflow options
-        Boolean call_covered_regions_only = true
         Boolean run_contamination_model = true
         Boolean run_orientation_bias_mixture_model = true
         Boolean run_variant_filter = true
@@ -70,7 +69,6 @@ workflow Mutect2 {
             normal_bams = if defined(normal_bam) then select_all([normal_bam]) else None,
             normal_bais = if defined(normal_bai) then select_all([normal_bai]) else None,
 
-            call_covered_regions_only = call_covered_regions_only,
             run_contamination_model = run_contamination_model,
             run_orientation_bias_mixture_model = run_orientation_bias_mixture_model,
             run_variant_filter = run_variant_filter,
@@ -86,10 +84,10 @@ workflow Mutect2 {
     }
 
     output {
-        Array[File]? covered_intervals = MultiSampleMutect2.covered_intervals
-        File evaluation_intervals = MultiSampleMutect2.evaluation_intervals
         File unfiltered_vcf = MultiSampleMutect2.unfiltered_vcf
         File unfiltered_vcf_idx = MultiSampleMutect2.unfiltered_vcf_idx
+        File? filtered_vcf = MultiSampleMutect2.filtered_vcf
+        File? filtered_vcf_idx = MultiSampleMutect2.filtered_vcf_idx
         File merged_vcf = MultiSampleMutect2.merged_vcf
         File merged_vcf_idx = MultiSampleMutect2.merged_vcf_idx
         File mutect_stats = MultiSampleMutect2.mutect_stats
