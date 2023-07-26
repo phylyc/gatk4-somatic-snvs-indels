@@ -13,3 +13,11 @@ struct Runtime {
     Int disk
     Int boot_disk_size
 }
+
+
+struct Sample {
+    File bam
+    File bai
+    String bam_sample_name
+    String? assigned_sample_name
+}
