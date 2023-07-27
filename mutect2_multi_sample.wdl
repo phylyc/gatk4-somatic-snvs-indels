@@ -1673,7 +1673,7 @@ task SelectVariants {
                 --input '~{output_vcf}' \
                 --output '~{output_vcf_idx}'
             rm '~{uncompressed_selected_vcf}'
-            rm '~{uncompressed_selected_vcf}.idx'
+            rm '~{uncompressed_output_vcf}.idx'
         fi
     >>>
 
