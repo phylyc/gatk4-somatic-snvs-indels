@@ -823,10 +823,10 @@ workflow MultiSampleMutect2 {
         File? read_orientation_model_params = LearnReadOrientationModel.orientation_bias
         Array[File]? contamination_table = CalculateContamination.contamination_table
         Array[File]? tumor_segmentation = CalculateContamination.tumor_segmentation
-        Array[File?]? scored_file = flatten(select_all(select_first([CNNScoreVariants.scored_vcf])))
-        Array[File?]? scored_file_idx = flatten(select_all(select_first([CNNScoreVariants.scored_vcf_idx])))
-        Array[File?]? funcotated_file = flatten(select_all(select_first([Funcotate.funcotated_output_file])))
-        Array[File?]? funcotated_file_index = flatten(select_all(select_first([Funcotate.funcotated_output_file_index])))
+        Array[File?]? scored_file = CNNScoreVariants.scored_vcf
+        Array[File?]? scored_file_idx = CNNScoreVariants.scored_vcf_idx
+        Array[File?]? funcotated_file = Funcotate.funcotated_output_file
+        Array[File?]? funcotated_file_index = Funcotate.funcotated_output_file_index
     }
 }
 
