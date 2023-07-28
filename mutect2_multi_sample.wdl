@@ -315,22 +315,30 @@ workflow MultiSampleMutect2 {
     Array[String] non_optional_tumor_sample_names = select_first([tumor_sample_names, GetTumorSampleName.sample_name])
     Array[String] non_optional_normal_sample_names = select_first([normal_sample_names, GetNormalSampleName.sample_name])
 
+    # The object syntax is likely going to be deprecated in newer WDL versions!
+    # Definition via {"bam": sample.left.left, ..., "is_tumor": true} leads to
+    # Error(s): No coercion defined from wom value(s) '"true"' of type 'String' to 'Boolean'.
+    # :(
     scatter (sample in zip(zip(tumor_bams, tumor_bais), zip(GetTumorSampleName.sample_name, non_optional_tumor_sample_names))) {
-        Sample tumors = {
-            "bam": sample.left.left,
-            "bai": sample.left.right,
-            "bam_sample_name": sample.right.left,
-            "assigned_sample_name": sample.right.right,
+        Sample tumors = object {
+            bam: sample.left.left,
+            bai: sample.left.right,
+            bam_sample_name: sample.right.left,
+            assigned_sample_name: sample.right.right,
+            is_tumor: true
         }
     }
     scatter (sample in zip(zip(non_optional_normal_bams, non_optional_normal_bais), zip(select_first([GetNormalSampleName.sample_name]), non_optional_normal_sample_names))) {
-        Sample normals = {
-            "bam": sample.left.left,
-            "bai": sample.left.right,
-            "bam_sample_name": sample.right.left,
-            "assigned_sample_name": sample.right.right,
+        Sample normals = object {
+            bam: sample.left.left,
+            bai: sample.left.right,
+            bam_sample_name: sample.right.left,
+            assigned_sample_name: sample.right.right,
+            is_tumor: false
         }
     }
+
+    Array[Sample] samples = flatten([tumors, normals])
 
     call PreprocessIntervals {
         input:
@@ -716,91 +724,86 @@ workflow MultiSampleMutect2 {
         # without a paired normal sample. This ensures that we obtain somatic annotations
         # for all normal samples in the case where there are multiple normal samples.
 
-        scatter (item in zip([tumors, normals], [true, false])) {
-            Array[Sample] samples = item.left
-            Boolean use_paired_normal = item.right
+        scatter (sample in samples) {
+            # We select the first normal sample to be the matched normal.
+            # todo: select normal with greatest sequencing depth
+            # The default CNNScoreVariant model should not be used on VCFs with
+            # annotations from a joint call-set. If the user chooses to run the CNN model,
+            # we remove the matched normal sample from the VCF annotations. This only
+            # results in the normal sample allelic coverage not being available for each
+            # annotated variant.
 
-            scatter (sample in samples) {
-                # We select the first normal sample to be the matched normal.
-                # todo: select normal with greatest sequencing depth
-                # The default CNNScoreVariant model should not be used on VCFs with
-                # annotations from a joint call-set. If the user chooses to run the CNN model,
-                # we remove the matched normal sample from the VCF annotations. This only
-                # results in the normal sample allelic coverage not being available for each
-                # annotated variant.
+            String? normal_sample_name = (
+                if normal_is_present && !run_cnn_scoring_model && sample.is_tumor
+                then select_first(select_first([GetNormalSampleName.sample_name]))
+                else None
+            )
 
-                String? normal_sample_name = (
-                    if normal_is_present && !run_cnn_scoring_model && use_paired_normal
-                    then select_first(select_first([GetNormalSampleName.sample_name]))
-                    else None
-                )
+            call SelectVariants as SelectSampleVariants {
+                input:
+                    filtered_vcf = selected_vcf,
+                    filtered_vcf_idx = selected_vcf_idx,
+                    exclude_filtered = false,  # is already filtered
+                    tumor_sample_name = sample.bam_sample_name,
+                    normal_sample_name = normal_sample_name,
+                    compress_output = compress_output,
+                    select_variants_extra_args = select_variants_extra_args,
+                    runtime_params = standard_runtime,
+                    memoryMB = mem_select_variants,
+                    runtime_minutes = time_startup + time_select_variants
+            }
 
-                call SelectVariants as SelectSampleVariants {
+            # CNNScoreVariants is very unreliable in its execution. It's probably
+            # just going to grief you by constantly failing the workflow for no apparent
+            # reason. This is still an issue for v4.3.0.0. You have been warned!
+            if (run_cnn_scoring_model) {
+                call CNNScoreVariants {
                     input:
-                        filtered_vcf = selected_vcf,
-                        filtered_vcf_idx = selected_vcf_idx,
-                        exclude_filtered = false,  # is already filtered
-                        tumor_sample_name = sample.bam_sample_name,
-                        normal_sample_name = normal_sample_name,
+                        ref_fasta = ref_fasta,
+                        ref_fasta_index = ref_fasta_index,
+                        ref_dict = ref_dict,
+                        input_vcf = SelectSampleVariants.selected_vcf,
+                        input_vcf_idx = SelectSampleVariants.selected_vcf_idx,
+                        tumor_bam = select_first([MergeBamOuts.merged_bam_out, sample.bam]),
+                        tumor_bai = select_first([MergeBamOuts.merged_bam_out_index, sample.bai]),
                         compress_output = compress_output,
-                        select_variants_extra_args = select_variants_extra_args,
                         runtime_params = standard_runtime,
-                        memoryMB = mem_select_variants,
-                        runtime_minutes = time_startup + time_select_variants
+                        memoryMB = mem_cnn_scoring,
+                        runtime_minutes = time_startup + time_cnn_scoring,
+                        cpu = cnn_scoring_cpu,
+                        cnn_score_variants_extra_args = cnn_score_variants_extra_args
                 }
+            }
 
-                # CNNScoreVariants is very unreliable in its execution. It's probably
-                # just going to grief you by constantly failing the workflow for no apparent
-                # reason. This is still an issue for v4.3.0.0. You have been warned!
-                if (run_cnn_scoring_model) {
-                    call CNNScoreVariants {
-                        input:
-                            ref_fasta = ref_fasta,
-                            ref_fasta_index = ref_fasta_index,
-                            ref_dict = ref_dict,
-                            input_vcf = SelectSampleVariants.selected_vcf,
-                            input_vcf_idx = SelectSampleVariants.selected_vcf_idx,
-                            tumor_bam = select_first([MergeBamOuts.merged_bam_out, sample.bam]),
-                            tumor_bai = select_first([MergeBamOuts.merged_bam_out_index, sample.bai]),
-                            compress_output = compress_output,
-                            runtime_params = standard_runtime,
-                            memoryMB = mem_cnn_scoring,
-                            runtime_minutes = time_startup + time_cnn_scoring,
-                            cpu = cnn_scoring_cpu,
-                            cnn_score_variants_extra_args = cnn_score_variants_extra_args
-                    }
-                }
-
-                if (run_funcotator) {
-                    call Funcotate {
-                        input:
-                            ref_fasta = ref_fasta,
-                            ref_fasta_index = ref_fasta_index,
-                            ref_dict = ref_dict,
-                            interval_list = PreprocessIntervals.preprocessed_interval_list,
-                            individual_id = individual_id,
-                            input_vcf = select_first([CNNScoreVariants.scored_vcf, SelectSampleVariants.selected_vcf]),
-                            input_vcf_idx = select_first([CNNScoreVariants.scored_vcf_idx, SelectSampleVariants.selected_vcf_idx]),
-                            output_base_name = sample.assigned_sample_name + ".annotated",
-                            tumor_sample_name = sample.assigned_sample_name,
-                            normal_sample_name = normal_sample_name,
-                            transcript_list = funcotator_transcript_list,
-                            data_sources_tar_gz = funcotator_data_sources_tar_gz,
-                            data_sources_paths = funcotator_data_sources_paths,
-                            use_gnomad = funcotator_use_gnomad,
-                            compress_output = compress_output,
-                            reference_version = funcotator_reference_version,
-                            output_format = funcotator_output_format,
-                            variant_type = funcotator_variant_type,
-                            transcript_selection_mode = funcotator_transcript_selection_mode,
-                            annotation_defaults = funcotator_annotation_defaults,
-                            annotation_overrides = funcotator_annotation_overrides,
-                            exclude_fields = funcotator_exclude_fields,
-                            funcotate_extra_args = funcotate_extra_args,
-                            runtime_params = standard_runtime,
-                            memoryMB = mem_funcotate,
-                            runtime_minutes = time_startup + time_funcotate
-                    }
+            if (run_funcotator) {
+                call Funcotate {
+                    input:
+                        ref_fasta = ref_fasta,
+                        ref_fasta_index = ref_fasta_index,
+                        ref_dict = ref_dict,
+                        interval_list = PreprocessIntervals.preprocessed_interval_list,
+                        individual_id = individual_id,
+                        input_vcf = select_first([CNNScoreVariants.scored_vcf, SelectSampleVariants.selected_vcf]),
+                        input_vcf_idx = select_first([CNNScoreVariants.scored_vcf_idx, SelectSampleVariants.selected_vcf_idx]),
+                        output_base_name = sample.assigned_sample_name + ".annotated",
+                        tumor_sample_name = sample.assigned_sample_name,
+                        normal_sample_name = normal_sample_name,
+                        transcript_list = funcotator_transcript_list,
+                        data_sources_tar_gz = funcotator_data_sources_tar_gz,
+                        data_sources_paths = funcotator_data_sources_paths,
+                        use_gnomad = funcotator_use_gnomad,
+                        compress_output = compress_output,
+                        reference_version = funcotator_reference_version,
+                        output_format = funcotator_output_format,
+                        variant_type = funcotator_variant_type,
+                        transcript_selection_mode = funcotator_transcript_selection_mode,
+                        annotation_defaults = funcotator_annotation_defaults,
+                        annotation_overrides = funcotator_annotation_overrides,
+                        exclude_fields = funcotator_exclude_fields,
+                        funcotate_extra_args = funcotate_extra_args,
+                        runtime_params = standard_runtime,
+                        memoryMB = mem_funcotate,
+                        runtime_minutes = time_startup + time_funcotate
                 }
             }
         }
