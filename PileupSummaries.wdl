@@ -100,10 +100,11 @@ workflow PileupSummaries {
                 memoryMB = mem_get_pileup_summaries,
                 runtime_minutes = time_startup + time_get_pileup_summaries
         }
+        File merged_pileup_summaries = select_first(GetPileupSummaries.pileup_summaries)
     }
 
     output {
-        File pileup_summaries = select_first([GatherPileupSummaries.merged_pileup_summaries, select_first(GetPileupSummaries.pileup_summaries)])
+        File pileup_summaries = select_first([GatherPileupSummaries.merged_pileup_summaries, merged_pileup_summaries])
     }
 }
 
