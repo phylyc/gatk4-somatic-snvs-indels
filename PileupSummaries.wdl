@@ -117,7 +117,7 @@ task ToPileupVCF {
         File vcf
         File vcf_idx
 
-        Float AF = 1.0
+        Float AF = 0.1  # AF that GetPileupSummaries will consider is by default between (0.01, 0.2)
 
         Runtime runtime_params
         String? docker = "dceoy/bcftools"
