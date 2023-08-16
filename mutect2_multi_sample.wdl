@@ -122,6 +122,8 @@ version development
 # needed for Runtime struct:
 #import "util.wdl" as util
 import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/util.wdl" as util
+#import "PileupSummaries.wdl" as ps
+import "https://github.com/phylyc/gatk4-somatic-snvs-indels/raw/master/PileupSummaries.wdl" as ps
 
 
 workflow MultiSampleMutect2 {
@@ -159,10 +161,11 @@ workflow MultiSampleMutect2 {
         Boolean run_variant_filter = true
         Boolean run_realignment_filter = true
         Boolean run_realignment_filter_only_on_high_confidence_variants = false
+        Boolean run_final_pileup_summaries = true
         Boolean run_cnn_scoring_model = false  # likely leads to failure if true; better performance with make_bamout = true
         Boolean run_funcotator = true
 
-        Boolean keep_germline = false  # should also set mutect2_genotype_germline_sites = true
+        Boolean keep_germline = true
         Boolean compress_output = true
         Boolean make_bamout = false
 
@@ -193,6 +196,7 @@ workflow MultiSampleMutect2 {
 
         # expose extra arguments for import of this workflow
         String? split_intervals_extra_args
+        String? getpileupsummaries_extra_args
         String? mutect2_extra_args
         String? filter_mutect2_extra_args
         String? select_variants_extra_args
@@ -427,80 +431,81 @@ workflow MultiSampleMutect2 {
     }
 
     if (run_contamination_model) {
-        scatter (tumor in tumors) {
-            scatter (scattered_intervals in SplitIntervals.interval_files) {
-                call GetPileupSummaries as GetTumorPileupSummaries {
+        if (normal_is_present) {
+            scatter (normal in normals) {
+                call ps.PileupSummaries as NormalPileupSummaries {
                     input:
-                        input_bam = tumor.bam,
-                        input_bai = tumor.bai,
-                        interval_list = scattered_intervals,
-                        variants_for_contamination = variants_for_contamination,
-                        variants_for_contamination_idx = variants_for_contamination_idx,
+                        scattered_interval_list = SplitIntervals.interval_files,
+                        bam = normal.bam,
+                        bai = normal.bai,
+                        ref_dict = ref_dict,
+                        variants = variants_for_contamination,
+                        variants_idx = variants_for_contamination_idx,
+                        getpileupsummaries_extra_args = getpileupsummaries_extra_args,
+                        output_name = normal.assigned_sample_name + ".pileup",
                         runtime_params = standard_runtime,
-                        memoryMB = mem_get_pileup_summaries,
-                        runtime_minutes = time_startup + time_get_pileup_summaries
+                        mem_get_pileup_summaries = mem_get_pileup_summaries,
+                        mem_gather_pileup_summaries = mem_gather_pileup_summaries,
+                        time_startup = time_startup,
+                        time_get_pileup_summaries = time_get_pileup_summaries,
+                        time_gather_pileup_summaries = time_gather_pileup_summaries
+                }
+
+                call CalculateContamination as CalculateNormalContamination {
+                    input:
+                        tumor_pileups = NormalPileupSummaries.pileup_summaries,
+                        runtime_params = standard_runtime,
+                        memoryMB = mem_calculate_contamination,
+                        runtime_minutes = time_startup + time_calculate_contamination
                 }
             }
+        }
+        # If multiple normals are present, it is not that important which of them
+        # to choose for the contamination workflow.
+        # todo: Choose the normal with the greatest sequencing depth.
+        File? normal_pileups = (
+            if normal_is_present
+            then select_first(select_first([NormalPileupSummaries.pileup_summaries]))
+            else None
+        )
 
-            call GatherPileupSummaries as GatherTumorPileupSummaries {
+        scatter (tumor in tumors) {
+            call ps.PileupSummaries as TumorPileupSummaries {
                 input:
-                    input_tables = flatten(GetTumorPileupSummaries.pileup_summaries),
+                    scattered_interval_list = SplitIntervals.interval_files,
+                    bam = tumor.bam,
+                    bai = tumor.bai,
                     ref_dict = ref_dict,
+                    variants = variants_for_contamination,
+                    variants_idx = variants_for_contamination_idx,
+                    getpileupsummaries_extra_args = getpileupsummaries_extra_args,
                     output_name = tumor.assigned_sample_name + ".pileup",
                     runtime_params = standard_runtime,
-                    memoryMB = mem_gather_pileup_summaries,
-                    runtime_minutes = time_startup + time_gather_pileup_summaries
-            }
-        }
-
-        if (normal_is_present) {
-            # If multiple normals are present, it is not that important which of them to
-            # choose for the contamination workflow.
-            # todo: Choose the normal with the greatest sequencing depth.
-#            call SelectBestNormal {
-#                input:
-#                    bams = non_optional_normal_bams,
-#                    bais = non_optional_normal_bais,
-#                    runtime_params = standard_runtime
-#            }
-            File best_normal_bam = select_first(non_optional_normal_bams)
-            File best_normal_bai = select_first(non_optional_normal_bais)
-
-            scatter (scattered_intervals in SplitIntervals.interval_files) {
-                call GetPileupSummaries as GetNormalPileupSummaries {
-                    input:
-                        input_bam = best_normal_bam,
-                        input_bai = best_normal_bai,
-                        interval_list = scattered_intervals,
-                        variants_for_contamination = variants_for_contamination,
-                        variants_for_contamination_idx = variants_for_contamination_idx,
-                        runtime_params = standard_runtime,
-                        memoryMB = mem_get_pileup_summaries,
-                        runtime_minutes = time_startup + time_get_pileup_summaries
-                }
+                    mem_get_pileup_summaries = mem_get_pileup_summaries,
+                    mem_gather_pileup_summaries = mem_gather_pileup_summaries,
+                    time_startup = time_startup,
+                    time_get_pileup_summaries = time_get_pileup_summaries,
+                    time_gather_pileup_summaries = time_gather_pileup_summaries
             }
 
-            call GatherPileupSummaries as GatherNormalPileupSummaries {
+            call CalculateContamination as CalculateTumorContamination {
                 input:
-                    input_tables = flatten(GetNormalPileupSummaries.pileup_summaries),
-                    ref_dict = ref_dict,
-                    output_name = basename(best_normal_bam, ".bam") + ".pileup",
-                    runtime_params = standard_runtime,
-                    memoryMB = mem_gather_pileup_summaries,
-                    runtime_minutes = time_startup + time_gather_pileup_summaries
-            }
-        }
-
-        scatter (tumor_pileups in GatherTumorPileupSummaries.merged_pileup_summaries) {
-            call CalculateContamination {
-                input:
-                    tumor_pileups = tumor_pileups,
-                    normal_pileups = GatherNormalPileupSummaries.merged_pileup_summaries,
+                    tumor_pileups = TumorPileupSummaries.pileup_summaries,
+                    normal_pileups = normal_pileups,
                     runtime_params = standard_runtime,
                     memoryMB = mem_calculate_contamination,
                     runtime_minutes = time_startup + time_calculate_contamination
             }
         }
+
+        Array[File] contamination_tables = flatten([
+            CalculateTumorContamination.contamination_table,
+            select_first([CalculateNormalContamination.contamination_table])
+        ])
+        Array[File] segmentation_tables = flatten([
+            CalculateTumorContamination.segmentation,
+            select_first([CalculateNormalContamination.segmentation])
+        ])
     }
 
     if (run_orientation_bias_mixture_model) {
@@ -528,8 +533,8 @@ workflow MultiSampleMutect2 {
                 input_vcf = MergeVariantCallVCFs.merged_vcf,
                 input_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx,
                 orientation_bias = LearnReadOrientationModel.orientation_bias,
-                contamination_tables = CalculateContamination.contamination_table,
-                tumor_segmentation = CalculateContamination.tumor_segmentation,
+                contamination_tables = CalculateTumorContamination.contamination_table,
+                tumor_segmentation = CalculateTumorContamination.segmentation,
                 mutect_stats = MergeMutectStats.merged_stats,
                 max_median_fragment_length_difference = filter_mutect2_max_median_fragment_length_difference,
                 min_alt_median_base_quality = filter_mutect2_min_alt_median_base_quality,
@@ -545,7 +550,7 @@ workflow MultiSampleMutect2 {
             input:
                 filtered_vcf = FilterMutectCalls.filtered_vcf,
                 filtered_vcf_idx = FilterMutectCalls.filtered_vcf_idx,
-                exclude_filtered = true,
+                select_passing = true,
                 keep_germline = keep_germline,
                 compress_output = compress_output,
                 select_variants_extra_args = select_variants_extra_args,
@@ -647,7 +652,7 @@ workflow MultiSampleMutect2 {
                 input:
                     filtered_vcf = MergeRealignmentFilteredVCFs.merged_vcf,
                     filtered_vcf_idx = MergeRealignmentFilteredVCFs.merged_vcf_idx,
-                    exclude_filtered = true,
+                    select_passing = true,
                     keep_germline = keep_germline,
                     compress_output = compress_output,
                     select_variants_extra_args = select_variants_extra_args,
@@ -674,25 +679,18 @@ workflow MultiSampleMutect2 {
                         runtime_minutes = time_startup + time_merge_vcfs
                 }
             }
-
-            File realignment_filtered_variants = select_first([
-                MergeLowConfidenceAndRealignmentFilteredVCFs.merged_vcf,
-                SelectPostRealignmentVariants.selected_vcf
-            ])
-            File realignment_filtered_variants_idx = select_first([
-                MergeLowConfidenceAndRealignmentFilteredVCFs.merged_vcf_idx,
-                SelectPostRealignmentVariants.selected_vcf_idx
-            ])
         }
     }
 
     File selected_vcf = select_first([
-        realignment_filtered_variants,
+        MergeLowConfidenceAndRealignmentFilteredVCFs.merged_vcf,
+        SelectPostRealignmentVariants.selected_vcf,
         SelectPassingVariants.selected_vcf,
         MergeVariantCallVCFs.merged_vcf
     ])
     File selected_vcf_idx = select_first([
-        realignment_filtered_variants_idx,
+        MergeLowConfidenceAndRealignmentFilteredVCFs.merged_vcf_idx,
+        SelectPostRealignmentVariants.selected_vcf_idx,
         SelectPassingVariants.selected_vcf_idx,
         MergeVariantCallVCFs.merged_vcf_idx
     ])
@@ -710,6 +708,76 @@ workflow MultiSampleMutect2 {
                 runtime_params = standard_runtime,
                 memoryMB = mem_merge_bams,
                 runtime_minutes = time_startup + time_merge_bams
+        }
+    }
+
+    if (run_final_pileup_summaries) {
+        if (keep_germline) {
+            call SelectVariants as SelectGermlineVariants {
+                input:
+                    filtered_vcf = selected_vcf,
+                    filtered_vcf_idx = selected_vcf_idx,
+                    select_passing = false,
+                    keep_germline = keep_germline,
+                    compress_output = compress_output,
+                    select_variants_extra_args = select_variants_extra_args,
+                    runtime_params = standard_runtime,
+                    memoryMB = mem_select_variants,
+                    runtime_minutes = time_startup + time_select_variants
+            }
+
+            scatter (sample in samples) {
+                call ps.PileupSummaries as GermlinePileupSummaries {
+                    input:
+                        scattered_interval_list = SplitIntervals.interval_files,
+                        bam = sample.bam,
+                        bai = sample.bai,
+                        ref_dict = ref_dict,
+                        vcf = SelectGermlineVariants.selected_vcf,
+                        vcf_idx = SelectGermlineVariants.selected_vcf_idx,
+                        getpileupsummaries_extra_args = getpileupsummaries_extra_args,
+                        output_name = sample.assigned_sample_name + ".germline.pileup",
+                        runtime_params = standard_runtime,
+                        mem_get_pileup_summaries = mem_get_pileup_summaries,
+                        mem_gather_pileup_summaries = mem_gather_pileup_summaries,
+                        time_startup = time_startup,
+                        time_get_pileup_summaries = time_get_pileup_summaries,
+                        time_gather_pileup_summaries = time_gather_pileup_summaries
+                }
+            }
+        }
+
+        call SelectVariants as SelectSomaticVariants {
+            input:
+                filtered_vcf = selected_vcf,
+                filtered_vcf_idx = selected_vcf_idx,
+                select_passing = true,
+                keep_germline = false,
+                compress_output = compress_output,
+                select_variants_extra_args = select_variants_extra_args,
+                runtime_params = standard_runtime,
+                memoryMB = mem_select_variants,
+                runtime_minutes = time_startup + time_select_variants
+        }
+
+        scatter (sample in samples) {
+            call ps.PileupSummaries as SomaticPileupSummaries {
+                input:
+                    scattered_interval_list = SplitIntervals.interval_files,
+                    bam = sample.bam,
+                    bai = sample.bai,
+                    ref_dict = ref_dict,
+                    vcf = SelectSomaticVariants.selected_vcf,
+                    vcf_idx = SelectSomaticVariants.selected_vcf_idx,
+                    getpileupsummaries_extra_args = getpileupsummaries_extra_args,
+                    output_name = sample.assigned_sample_name + ".somatic.pileup",
+                    runtime_params = standard_runtime,
+                    mem_get_pileup_summaries = mem_get_pileup_summaries,
+                    mem_gather_pileup_summaries = mem_gather_pileup_summaries,
+                    time_startup = time_startup,
+                    time_get_pileup_summaries = time_get_pileup_summaries,
+                    time_gather_pileup_summaries = time_gather_pileup_summaries
+            }
         }
     }
 
@@ -741,9 +809,8 @@ workflow MultiSampleMutect2 {
 
             call SelectVariants as SelectSampleVariants {
                 input:
-                    filtered_vcf = selected_vcf,
-                    filtered_vcf_idx = selected_vcf_idx,
-                    exclude_filtered = false,  # is already filtered
+                    filtered_vcf = select_first([SelectSomaticVariants.selected_vcf, selected_vcf]),
+                    filtered_vcf_idx = select_first([SelectSomaticVariants.selected_vcf_idx, selected_vcf_idx]),
                     tumor_sample_name = sample.bam_sample_name,
                     normal_sample_name = normal_sample_name,
                     compress_output = compress_output,
@@ -814,17 +881,19 @@ workflow MultiSampleMutect2 {
         File unfiltered_vcf_idx = MergeVariantCallVCFs.merged_vcf_idx
         File? filtered_vcf = FilterMutectCalls.filtered_vcf
         File? filtered_vcf_idx = FilterMutectCalls.filtered_vcf_idx
-        File merged_vcf = selected_vcf
-        File merged_vcf_idx = selected_vcf_idx
-        File mutect_stats = MergeMutectStats.merged_stats
+        File? somatic_vcf = SelectSomaticVariants.selected_vcf
+        File? somatic_vcf_idx = SelectSomaticVariants.selected_vcf_idx
+        File? germline_vcf = SelectGermlineVariants.selected_vcf
+        File? germline_vcf_idx = SelectGermlineVariants.selected_vcf_idx
         File? bamout = MergeBamOuts.merged_bam_out
         File? bamout_index = MergeBamOuts.merged_bam_out_index
+        File mutect_stats = MergeMutectStats.merged_stats
         File? filtering_stats = FilterMutectCalls.filtering_stats
         File? read_orientation_model_params = LearnReadOrientationModel.orientation_bias
-        Array[File]? contamination_table = CalculateContamination.contamination_table
-        Array[File]? tumor_segmentation = CalculateContamination.tumor_segmentation
-        Array[File?]? scored_file = CNNScoreVariants.scored_vcf
-        Array[File?]? scored_file_idx = CNNScoreVariants.scored_vcf_idx
+        Array[File]? somatic_pileup_summaries = SomaticPileupSummaries.pileup_summaries
+        Array[File]? germline_pileup_summaries = GermlinePileupSummaries.pileup_summaries
+        Array[File]? contamination_table = contamination_tables
+        Array[File]? segmentation_table = segmentation_tables
         Array[File?]? funcotated_file = Funcotate.funcotated_output_file
         Array[File?]? funcotated_file_index = Funcotate.funcotated_output_file_index
     }
@@ -1219,121 +1288,6 @@ task LearnReadOrientationModel {
     }
 }
 
-task GetPileupSummaries {
-    # If the variants for contamination and the intervals for this scatter don't
-    # intersect, GetPileupSummaries throws an error. However, there is nothing wrong
-    # with an empty intersection for our purposes; it simply doesn't contribute to the
-    # merged pileup summaries that we create downstream. We implement this with an array
-    # outputs. If the tool errors, no table is created and the glob yields an empty array.
-
-	input {
-        File interval_list
-        File input_bam
-        File input_bai
-        File? variants_for_contamination
-        File? variants_for_contamination_idx
-        String? getpileupsummaries_extra_args
-
-        Runtime runtime_params
-        Int? memoryMB
-        Int? runtime_minutes
-        Int? disk_spaceGB
-	}
-
-    parameter_meta {
-        interval_list: {localization_optional: true}
-        input_bam: {localization_optional: true}
-        input_bai: {localization_optional: true}
-        variants_for_contamination: {localization_optional: true}
-        variants_for_contamination_idx: {localization_optional: true}
-    }
-
-    String sample_id = basename(input_bam, ".bam")
-    String output_name = sample_id + ".pileup"
-
-    command <<<
-        set +e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
-
-        if ~{!defined(variants_for_contamination)} ; then
-            echo "ERROR: variants_for_contamination must be supplied."
-            false
-        fi
-
-        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
-            GetPileupSummaries \
-            --input '~{input_bam}' \
-            --intervals '~{interval_list}' \
-            --intervals '~{variants_for_contamination}' \
-            --interval-set-rule INTERSECTION \
-            --variant '~{variants_for_contamination}' \
-            --output '~{output_name}' \
-            ~{getpileupsummaries_extra_args}
-
-        # It only fails due to empty intersection between variants and intervals, which is ok.
-        exit 0
-    >>>
-
-    # need to use glob in case GetPileupSummaries fails and does not produce output files
-    output {
-        Array[File] pileup_summaries = glob(output_name)
-    }
-
-    runtime {
-        docker: runtime_params.docker
-        bootDiskSizeGb: runtime_params.boot_disk_size
-        memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
-        disks: "local-disk " + select_first([disk_spaceGB, runtime_params.disk]) + " HDD"
-        preemptible: runtime_params.preemptible
-        maxRetries: runtime_params.max_retries
-        cpu: runtime_params.cpu
-    }
-}
-
-task GatherPileupSummaries {
-    input {
-        Array[File] input_tables
-        File ref_dict
-        String output_name
-
-        Runtime runtime_params
-        Int? memoryMB
-        Int? runtime_minutes
-    }
-
-    # Optional localization leads to cromwell error.
-    # parameter_meta {
-    #     input_tables: {localization_optional: true}
-    #     ref_dict: {localization_optional: true}
-    # }
-
-    command <<<
-        set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.jar_override}
-        gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
-            GatherPileupSummaries \
-            --sequence-dictionary '~{ref_dict}' \
-            ~{sep="' " prefix("-I '", input_tables)}' \
-            -O '~{output_name}'
-    >>>
-
-    output {
-        File merged_pileup_summaries = output_name
-    }
-
-    runtime {
-        docker: runtime_params.docker
-        bootDiskSizeGb: runtime_params.boot_disk_size
-        memory: select_first([memoryMB, runtime_params.machine_mem]) + " MB"
-        runtime_minutes: select_first([runtime_minutes, runtime_params.runtime_minutes])
-        disks: "local-disk " + runtime_params.disk + " HDD"
-        preemptible: runtime_params.preemptible
-        maxRetries: runtime_params.max_retries
-        cpu: runtime_params.cpu
-    }
-}
-
 task CalculateContamination {
     # This tool is set, by default, to operate over the intersection of your germline
     # biallelic resource with your specified intervals. The tool works by pulling down
@@ -1376,7 +1330,7 @@ task CalculateContamination {
 
     output {
         File contamination_table = output_contamination
-        File tumor_segmentation = output_segments
+        File segmentation = output_segments
     }
 
     runtime {
@@ -1575,7 +1529,7 @@ task SelectVariants {
         File? ref_dict
         File filtered_vcf
         File filtered_vcf_idx
-        Boolean exclude_filtered = false
+        Boolean select_passing = false
         Boolean keep_germline = false
         Boolean compress_output = false
         String? tumor_sample_name
@@ -1632,28 +1586,33 @@ task SelectVariants {
         # =======================================
         # We do the selection step using grep to also select germline variants.
 
-        if ~{exclude_filtered} ; then
+        grep "^#" '~{uncompressed_output_vcf}' > '~{uncompressed_selected_vcf}'
+        if ~{select_passing} ; then
             echo ">> Selecting PASSing variants ... "
-            grep "#" '~{uncompressed_output_vcf}' > '~{uncompressed_selected_vcf}'
             grep "PASS" '~{uncompressed_output_vcf}' >> '~{uncompressed_selected_vcf}'
-            if ~{keep_germline} ; then
-                echo ">> Selecting germline variants ... "
-                grep -P "\tgermline\t" '~{uncompressed_output_vcf}' >> '~{uncompressed_selected_vcf}'
-            fi
-            num_vars=~{dollar}(grep -v "#" '~{uncompressed_output_vcf}' | wc -l)
-            num_selected_vars=~{dollar}(grep -v "#" '~{uncompressed_selected_vcf}' | wc -l)
-            echo ">> Selected ~{dollar}num_selected_vars out of ~{dollar}num_vars variants."
-            rm '~{uncompressed_output_vcf}'
-        else
-            mv '~{uncompressed_output_vcf}' '~{uncompressed_selected_vcf}'
+            num_vars=~{dollar}(grep -v "^#" '~{uncompressed_output_vcf}' | wc -l)
+            num_selected_vars=~{dollar}(grep -v "^#" '~{uncompressed_selected_vcf}' | wc -l)
+            echo ">> Selected ~{dollar}num_selected_vars PASSing out of ~{dollar}num_vars variants."
         fi
+        if ~{keep_germline} ; then
+            echo ">> Selecting germline variants ... "
+            grep -P "\tgermline\t" '~{uncompressed_output_vcf}' >> '~{uncompressed_selected_vcf}'
+            num_vars=~{dollar}(grep -v "^#" '~{uncompressed_output_vcf}' | wc -l)
+            num_selected_vars=~{dollar}(grep -v "^#" '~{uncompressed_selected_vcf}' | wc -l)
+            echo ">> Selected ~{dollar}num_selected_vars germline out of ~{dollar}num_vars variants."
+        fi
+
+        # if not select_passing or not keep_germline:
+        if ~{!select_passing} || ~{!keep_germline} ; then
+            mv '~{uncompressed_output_vcf}' '~{uncompressed_selected_vcf}'
+        fi 
 
         # =======================================
         # Hack to correct a SelectVariants output bug. When selecting for samples, this
         # task only retains the first sample annotation in the header. Those annotations
         # are important for Funcotator to fill the t_alt_count and t_ref_count coverage
-        # columns.
-        # Note: This can possibly be achieved by adding an appropriate --COMMENT flag.
+        # columns. This hack assumes that only one tumor sample and/or only one normal
+        # sample have been selected.
 
         if ~{defined(tumor_sample_name)} ; then
             echo ">> Fixing tumor sample name in vcf header ... "
