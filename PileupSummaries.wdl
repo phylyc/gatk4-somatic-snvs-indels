@@ -62,12 +62,38 @@ workflow PileupSummaries {
         }
     }
 
-    scatter (scattered_intervals in select_all(select_first([scattered_interval_list, [interval_list]]))) {
+    if (defined(scattered_interval_list)) {
+        scatter (scattered_intervals in select_all(select_first([scattered_interval_list]))) {
+            call GetPileupSummaries as ScatteredGetPileupSummaries {
+                input:
+                    input_bam = bam,
+                    input_bai = bai,
+                    interval_list = scattered_intervals,
+                    variants = select_first([variants, ToPileupVCF.variants]),
+                    variants_idx = select_first([variants_idx, ToPileupVCF.variants_idx]),
+                    runtime_params = select_first([runtime_params, standard_runtime]),
+                    memoryMB = mem_get_pileup_summaries,
+                    runtime_minutes = time_startup + time_get_pileup_summaries
+            }
+        }
+
+        call GatherPileupSummaries {
+            input:
+                input_tables = flatten(ScatteredGetPileupSummaries.pileup_summaries),
+                ref_dict = ref_dict,
+                output_name = output_name,
+                runtime_params = select_first([runtime_params, standard_runtime]),
+                memoryMB = mem_gather_pileup_summaries,
+                runtime_minutes = time_startup + time_gather_pileup_summaries
+        }
+    }
+    # else
+    if (!defined(scattered_interval_list)) {
         call GetPileupSummaries {
             input:
                 input_bam = bam,
                 input_bai = bai,
-                interval_list = scattered_intervals,
+                interval_list = interval_list,
                 variants = select_first([variants, ToPileupVCF.variants]),
                 variants_idx = select_first([variants_idx, ToPileupVCF.variants_idx]),
                 runtime_params = select_first([runtime_params, standard_runtime]),
@@ -76,18 +102,8 @@ workflow PileupSummaries {
         }
     }
 
-    call GatherPileupSummaries {
-        input:
-            input_tables = flatten(GetPileupSummaries.pileup_summaries),
-            ref_dict = ref_dict,
-            output_name = output_name,
-            runtime_params = select_first([runtime_params, standard_runtime]),
-            memoryMB = mem_gather_pileup_summaries,
-            runtime_minutes = time_startup + time_gather_pileup_summaries
-    }
-
     output {
-        File pileup_summaries = GatherPileupSummaries.merged_pileup_summaries
+        File pileup_summaries = select_first([GatherPileupSummaries.merged_pileup_summaries, GetPileupSummaries.pileup_summaries])
     }
 }
 
@@ -155,7 +171,7 @@ task GetPileupSummaries {
     # outputs. If the tool errors, no table is created and the glob yields an empty array.
 
 	input {
-        File interval_list
+        File? interval_list
         File input_bam
         File input_bai
         File? variants
@@ -191,7 +207,7 @@ task GetPileupSummaries {
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             GetPileupSummaries \
             --input '~{input_bam}' \
-            --intervals '~{interval_list}' \
+            ~{"--intervals '" +  interval_list + "'"} \
             --intervals '~{variants}' \
             --interval-set-rule INTERSECTION \
             --variant '~{variants}' \
