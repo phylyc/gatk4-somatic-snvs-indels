@@ -18,6 +18,13 @@ workflows:
     authors:
       - orcid: 0000-0001-9584-9135
 
+  - name: PileupSummaries
+    subclass: WDL
+    publish: true
+    primaryDescriptorPath: PileupSummaries.wdl
+    authors:
+      - orcid: 0000-0001-9584-9135
+
   - name: CoverageIntervals
     subclass: WDL
     publish: true
