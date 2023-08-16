@@ -20,20 +20,45 @@ workflow PileupSummaries {
 
         String output_name
 
-        Runtime runtime_params
-        Int? mem_get_pileup_summaries = 4096  # needs at least 2G
-        Int? mem_gather_pileup_summaries = 512  # 64
-        Int? time_startup = 10
-        Int? time_get_pileup_summaries = 90  # 1.5 h
-        Int? time_gather_pileup_summaries = 5
+        Runtime? runtime_params
+
+        String gatk_docker = "broadinstitute/gatk"
+        File? gatk_override
+        Int preemptible = 1
+        Int max_retries = 1
+        Int emergency_extra_diskGB = 0
+
+        Int mem_get_pileup_summaries = 4096  # needs at least 2G
+        Int mem_gather_pileup_summaries = 512  # 64
+        Int time_startup = 10
+        Int time_get_pileup_summaries = 90  # 1.5 h
+        Int time_gather_pileup_summaries = 5
 	}
+
+    Int gatk_override_size = if defined(gatk_override) then ceil(size(gatk_override, "GB")) else 0
+    Int disk_padGB = 1 + gatk_override_size + emergency_extra_diskGB
+
+    if (!defined(runtime_params)) {
+        Runtime standard_runtime = {
+            "docker": gatk_docker,
+            "jar_override": gatk_override,
+            "max_retries": max_retries,
+            "preemptible": preemptible,
+            "cpu": 1,
+            "machine_mem": 2024,
+            "command_mem": 2024,
+            "runtime_minutes": 60,
+            "disk": 1 + disk_padGB,
+            "boot_disk_size": 12  # needs to be > 10
+        }
+    }
 
     if (defined(vcf) && !defined(variants)) {
         call ToPileupVCF {
             input:
                 vcf = select_first([vcf]),
                 vcf_idx = select_first([vcf_idx]),
-                runtime_params = runtime_params
+                runtime_params = select_first([runtime_params, standard_runtime]),
         }
     }
 
@@ -45,7 +70,7 @@ workflow PileupSummaries {
                 interval_list = scattered_intervals,
                 variants = select_first([variants, ToPileupVCF.variants]),
                 variants_idx = select_first([variants_idx, ToPileupVCF.variants_idx]),
-                runtime_params = runtime_params,
+                runtime_params = select_first([runtime_params, standard_runtime]),
                 memoryMB = mem_get_pileup_summaries,
                 runtime_minutes = time_startup + time_get_pileup_summaries
         }
@@ -56,7 +81,7 @@ workflow PileupSummaries {
             input_tables = flatten(GetPileupSummaries.pileup_summaries),
             ref_dict = ref_dict,
             output_name = output_name,
-            runtime_params = runtime_params,
+            runtime_params = select_first([runtime_params, standard_runtime]),
             memoryMB = mem_gather_pileup_summaries,
             runtime_minutes = time_startup + time_gather_pileup_summaries
     }
