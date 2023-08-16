@@ -21,7 +21,7 @@ workflow PileupSummaries {
         Float minimum_population_allele_frequency = 0.01
         Float maximum_population_allele_frequency = 0.2
 
-        String output_name
+        String output_base_name
 
         Runtime? runtime_params
 
@@ -86,7 +86,7 @@ workflow PileupSummaries {
             input:
                 input_tables = flatten(ScatteredGetPileupSummaries.pileup_summaries),
                 ref_dict = ref_dict,
-                output_name = output_name,
+                output_base_name = output_base_name,
                 runtime_params = select_first([runtime_params, standard_runtime]),
                 memoryMB = mem_gather_pileup_summaries,
                 runtime_minutes = time_startup + time_gather_pileup_summaries
@@ -99,6 +99,7 @@ workflow PileupSummaries {
                 input_bam = bam,
                 input_bai = bai,
                 interval_list = interval_list,
+                output_base_name = output_base_name,
                 variants = select_first([variants, ToPileupVCF.variants]),
                 variants_idx = select_first([variants_idx, ToPileupVCF.variants_idx]),
                 minimum_population_allele_frequency = minimum_population_allele_frequency,
@@ -184,6 +185,7 @@ task GetPileupSummaries {
         File input_bai
         File? variants
         File? variants_idx
+        String? output_base_name
         String? getpileupsummaries_extra_args
 
         Float minimum_population_allele_frequency = 0.01
@@ -203,7 +205,7 @@ task GetPileupSummaries {
         variants_idx: {localization_optional: true}
     }
 
-    String sample_id = basename(input_bam, ".bam")
+    String sample_id = if defined(output_base_name) then output_base_name else basename(input_bam, ".bam")
     String output_name = sample_id + ".pileup"
 
     command <<<
@@ -252,7 +254,7 @@ task GatherPileupSummaries {
     input {
         Array[File] input_tables
         File ref_dict
-        String output_name
+        String output_base_name
 
         Runtime runtime_params
         Int? memoryMB
@@ -264,6 +266,8 @@ task GatherPileupSummaries {
     #     input_tables: {localization_optional: true}
     #     ref_dict: {localization_optional: true}
     # }
+
+    String output_name = output_base_name + ".pileup"
 
     command <<<
         set -e

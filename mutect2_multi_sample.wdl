@@ -442,12 +442,12 @@ workflow MultiSampleMutect2 {
                         variants = variants_for_contamination,
                         variants_idx = variants_for_contamination_idx,
                         getpileupsummaries_extra_args = getpileupsummaries_extra_args,
-                        output_name = normal.assigned_sample_name + ".pileup",
+                        output_base_name = normal.assigned_sample_name,
                         runtime_params = standard_runtime,
                         mem_get_pileup_summaries = mem_get_pileup_summaries,
                         mem_gather_pileup_summaries = mem_gather_pileup_summaries,
                         time_startup = time_startup,
-                        time_get_pileup_summaries = time_get_pileup_summaries,
+                        time_get_pileup_summaries = time_startup + ceil(time_get_pileup_summaries / scatter_count),
                         time_gather_pileup_summaries = time_gather_pileup_summaries
                 }
 
@@ -479,12 +479,12 @@ workflow MultiSampleMutect2 {
                     variants = variants_for_contamination,
                     variants_idx = variants_for_contamination_idx,
                     getpileupsummaries_extra_args = getpileupsummaries_extra_args,
-                    output_name = tumor.assigned_sample_name + ".pileup",
+                    output_base_name = tumor.assigned_sample_name,
                     runtime_params = standard_runtime,
                     mem_get_pileup_summaries = mem_get_pileup_summaries,
                     mem_gather_pileup_summaries = mem_gather_pileup_summaries,
                     time_startup = time_startup,
-                    time_get_pileup_summaries = time_get_pileup_summaries,
+                    time_get_pileup_summaries = time_startup + ceil(time_get_pileup_summaries / scatter_count),
                     time_gather_pileup_summaries = time_gather_pileup_summaries
             }
 
@@ -736,12 +736,12 @@ workflow MultiSampleMutect2 {
                         vcf = SelectGermlineVariants.selected_vcf,
                         vcf_idx = SelectGermlineVariants.selected_vcf_idx,
                         getpileupsummaries_extra_args = getpileupsummaries_extra_args,
-                        output_name = sample.assigned_sample_name + ".germline.pileup",
+                        output_base_name = sample.assigned_sample_name + ".germline",
                         runtime_params = standard_runtime,
                         mem_get_pileup_summaries = mem_get_pileup_summaries,
                         mem_gather_pileup_summaries = mem_gather_pileup_summaries,
                         time_startup = time_startup,
-                        time_get_pileup_summaries = time_get_pileup_summaries,
+                        time_get_pileup_summaries = time_startup + ceil(time_get_pileup_summaries / scatter_count),
                         time_gather_pileup_summaries = time_gather_pileup_summaries
                 }
             }
@@ -770,12 +770,12 @@ workflow MultiSampleMutect2 {
                     vcf = SelectSomaticVariants.selected_vcf,
                     vcf_idx = SelectSomaticVariants.selected_vcf_idx,
                     getpileupsummaries_extra_args = getpileupsummaries_extra_args,
-                    output_name = sample.assigned_sample_name + ".somatic.pileup",
+                    output_base_name = sample.assigned_sample_name + ".somatic",
                     runtime_params = standard_runtime,
                     mem_get_pileup_summaries = mem_get_pileup_summaries,
                     mem_gather_pileup_summaries = mem_gather_pileup_summaries,
                     time_startup = time_startup,
-                    time_get_pileup_summaries = time_get_pileup_summaries,
+                    time_get_pileup_summaries = time_startup + ceil(time_get_pileup_summaries / scatter_count),
                     time_gather_pileup_summaries = time_gather_pileup_summaries
             }
         }
