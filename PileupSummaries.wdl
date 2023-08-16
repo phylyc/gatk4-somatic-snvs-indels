@@ -89,7 +89,7 @@ workflow PileupSummaries {
     }
     # else
     if (!defined(scattered_interval_list)) {
-        call GetPileupSummaries as GetPileupSummaries {
+        call GetPileupSummaries {
             input:
                 input_bam = bam,
                 input_bai = bai,
@@ -103,7 +103,7 @@ workflow PileupSummaries {
     }
 
     output {
-        File pileup_summaries = select_first([GatherPileupSummaries.merged_pileup_summaries, select_first([GetPileupSummaries.pileup_summaries])])
+        File pileup_summaries = select_first([GatherPileupSummaries.merged_pileup_summaries, select_first(GetPileupSummaries.pileup_summaries)])
     }
 }
 
