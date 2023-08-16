@@ -18,8 +18,8 @@ workflow PileupSummaries {
         File? vcf_idx
         String? getpileupsummaries_extra_args
 
-        Int minimum_population_allele_frequency = 0.01
-        Int maximum_population_allele_frequency = 0.2
+        Float minimum_population_allele_frequency = 0.01
+        Float maximum_population_allele_frequency = 0.2
 
         String output_name
 
@@ -186,8 +186,8 @@ task GetPileupSummaries {
         File? variants_idx
         String? getpileupsummaries_extra_args
 
-        Int minimum_population_allele_frequency = 0.01
-        Int maximum_population_allele_frequency = 0.2
+        Float minimum_population_allele_frequency = 0.01
+        Float maximum_population_allele_frequency = 0.2
 
         Runtime runtime_params
         Int? memoryMB
