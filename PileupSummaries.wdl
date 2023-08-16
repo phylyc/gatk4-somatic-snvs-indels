@@ -178,6 +178,9 @@ task GetPileupSummaries {
         File? variants
         File? variants_idx
         String? getpileupsummaries_extra_args
+        
+        Int minimum_population_allele_frequency = 0.01
+        Int maximum_population_allele_frequency = 0.2
 
         Runtime runtime_params
         Int? memoryMB
@@ -212,6 +215,8 @@ task GetPileupSummaries {
             --intervals '~{variants}' \
             --interval-set-rule INTERSECTION \
             --variant '~{variants}' \
+            -min-af '~{minimum_population_allele_frequency}' \
+            -max-af '~{maximum_population_allele_frequency}' \
             --output '~{output_name}' \
             ~{getpileupsummaries_extra_args}
 
