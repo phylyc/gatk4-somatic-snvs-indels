@@ -18,6 +18,9 @@ workflow PileupSummaries {
         File? vcf_idx
         String? getpileupsummaries_extra_args
 
+        Int minimum_population_allele_frequency = 0.01
+        Int maximum_population_allele_frequency = 0.2
+
         String output_name
 
         Runtime? runtime_params
@@ -71,6 +74,8 @@ workflow PileupSummaries {
                     interval_list = scattered_intervals,
                     variants = select_first([variants, ToPileupVCF.variants]),
                     variants_idx = select_first([variants_idx, ToPileupVCF.variants_idx]),
+                    minimum_population_allele_frequency = minimum_population_allele_frequency,
+                    maximum_population_allele_frequency = maximum_population_allele_frequency,
                     runtime_params = select_first([runtime_params, standard_runtime]),
                     memoryMB = mem_get_pileup_summaries,
                     runtime_minutes = time_startup + time_get_pileup_summaries
@@ -96,6 +101,8 @@ workflow PileupSummaries {
                 interval_list = interval_list,
                 variants = select_first([variants, ToPileupVCF.variants]),
                 variants_idx = select_first([variants_idx, ToPileupVCF.variants_idx]),
+                minimum_population_allele_frequency = minimum_population_allele_frequency,
+                maximum_population_allele_frequency = maximum_population_allele_frequency,
                 runtime_params = select_first([runtime_params, standard_runtime]),
                 memoryMB = mem_get_pileup_summaries,
                 runtime_minutes = time_startup + time_get_pileup_summaries
@@ -178,7 +185,7 @@ task GetPileupSummaries {
         File? variants
         File? variants_idx
         String? getpileupsummaries_extra_args
-        
+
         Int minimum_population_allele_frequency = 0.01
         Int maximum_population_allele_frequency = 0.2
 
