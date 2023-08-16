@@ -11,6 +11,7 @@ workflow PileupSummaries {
         File bam
         File bai
         File ref_dict
+        String output_base_name
 
         File? variants
         File? variants_idx
@@ -20,8 +21,6 @@ workflow PileupSummaries {
 
         Float minimum_population_allele_frequency = 0.01
         Float maximum_population_allele_frequency = 0.2
-
-        String output_base_name
 
         Runtime? runtime_params
 
@@ -84,7 +83,7 @@ workflow PileupSummaries {
 
         call GatherPileupSummaries {
             input:
-                input_tables = flatten(ScatteredGetPileupSummaries.pileup_summaries),
+                input_tables = ScatteredGetPileupSummaries.pileup_summaries,
                 ref_dict = ref_dict,
                 output_base_name = output_base_name,
                 runtime_params = select_first([runtime_params, standard_runtime]),
@@ -108,11 +107,10 @@ workflow PileupSummaries {
                 memoryMB = mem_get_pileup_summaries,
                 runtime_minutes = time_startup + time_get_pileup_summaries
         }
-        File merged_pileup_summaries = select_first(GetPileupSummaries.pileup_summaries)
     }
 
     output {
-        File pileup_summaries = select_first([GatherPileupSummaries.merged_pileup_summaries, merged_pileup_summaries])
+        File pileup_summaries = select_first([GatherPileupSummaries.merged_pileup_summaries, GetPileupSummaries.pileup_summaries])
     }
 }
 
@@ -217,6 +215,11 @@ task GetPileupSummaries {
             false
         fi
 
+        # Create an empty pileup file if there are no variants in the intersection
+        # between the variants and the intervals. Will be overwritten by GetPileupSummaries
+        echo "#<METADATA>SAMPLE=~{sample_id}" > '~{output_name}'
+        echo "contig\tposition\tref_count\talt_count\tother_alt_count\tallele_frequency" >> '~{output_name}'
+
         gatk --java-options "-Xmx~{select_first([memoryMB, runtime_params.command_mem])}m" \
             GetPileupSummaries \
             --input '~{input_bam}' \
@@ -233,9 +236,8 @@ task GetPileupSummaries {
         exit 0
     >>>
 
-    # need to use glob in case GetPileupSummaries fails and does not produce output files
     output {
-        Array[File] pileup_summaries = glob(output_name)
+        File pileup_summaries = output_name
     }
 
     runtime {
