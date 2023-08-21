@@ -44,7 +44,7 @@ workflow ContaminationEstimation {
         Int time_calculate_contamination = 10
     }
 
-    Int scatter_count = if defined(scattered_interval_list) then length(scattered_interval_list) else 1
+    Int scatter_count = if defined(scattered_interval_list) then length(select_first([scattered_interval_list])) else 1
     Int gatk_override_size = if defined(gatk_override) then ceil(size(gatk_override, "GB")) else 0
     Int disk_padGB = 1 + gatk_override_size + emergency_extra_diskGB
 
