@@ -70,7 +70,8 @@ workflow PileupSummaries {
                 input:
                     input_bam = bam,
                     input_bai = bai,
-                    interval_list = scattered_intervals,
+                    interval_list = interval_list,
+                    scattered_intervals = scattered_intervals,
                     variants = select_first([variants, ToPileupVCF.variants]),
                     variants_idx = select_first([variants_idx, ToPileupVCF.variants_idx]),
                     minimum_population_allele_frequency = minimum_population_allele_frequency,
@@ -179,6 +180,7 @@ task GetPileupSummaries {
 
 	input {
         File? interval_list
+        File? scattered_intervals
         File input_bam
         File input_bai
         File? variants
@@ -224,6 +226,7 @@ task GetPileupSummaries {
             GetPileupSummaries \
             --input '~{input_bam}' \
             ~{"--intervals '" +  interval_list + "'"} \
+            ~{"--intervals '" +  scattered_intervals + "'"} \
             --intervals '~{variants}' \
             --interval-set-rule INTERSECTION \
             --variant '~{variants}' \
