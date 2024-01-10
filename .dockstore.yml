@@ -3,66 +3,66 @@ workflows:
   - name: MultiSampleMutect2
     subclass: WDL
     publish: true
-    primaryDescriptorPath: mutect2_multi_sample.wdl
+    primaryDescriptorPath: /mutect2_multi_sample.wdl
     testParameterFiles:
-      - mutect2_multi_sample.inputs.json
+      - /mutect2_multi_sample.inputs.json
     authors:
       - orcid: 0000-0001-9584-9135
 
   - name: Mutect2
     subclass: WDL
     publish: true
-    primaryDescriptorPath: mutect2.wdl
+    primaryDescriptorPath: /mutect2.wdl
     testParameterFiles:
-      - mutect2.inputs.json
+      - /mutect2.inputs.json
     authors:
       - orcid: 0000-0001-9584-9135
 
   - name: PileupSummaries
     subclass: WDL
     publish: true
-    primaryDescriptorPath: PileupSummaries.wdl
+    primaryDescriptorPath: /PileupSummaries.wdl
     authors:
       - orcid: 0000-0001-9584-9135
 
   - name: ContaminationEstimation
     subclass: WDL
     publish: true
-    primaryDescriptorPath: ContaminationEstimation.wdl
+    primaryDescriptorPath: /ContaminationEstimation.wdl
     authors:
       - orcid: 0000-0001-9584-9135
 
   - name: CoverageIntervals
     subclass: WDL
     publish: true
-    primaryDescriptorPath: coverage_intervals.wdl
+    primaryDescriptorPath: /coverage_intervals.wdl
     authors:
       - orcid: 0000-0001-9584-9135
 
   - name: SummarizeCoverageIntervalsInBam
     subclass: WDL
     publish: true
-    primaryDescriptorPath: summarize_coverage_intervals_in_bam.wdl
+    primaryDescriptorPath: /summarize_coverage_intervals_in_bam.wdl
     authors:
       - orcid: 0000-0001-9584-9135
 
   - name: Mutect2_PoN
     subclass: WDL
     publish: true
-    primaryDescriptorPath: mutect2_pon.wdl
+    primaryDescriptorPath: /mutect2_pon.wdl
     authors:
       - orcid: 0000-0001-9584-9135
 
   - name: Mutect2_PoN_from_file
     subclass: WDL
     publish: true
-    primaryDescriptorPath: mutect2_pon_from_file.wdl
+    primaryDescriptorPath: /mutect2_pon_from_file.wdl
     authors:
       - orcid: 0000-0001-9584-9135
 
   - name: Mutect2_PoN_from_vcfs
     subclass: WDL
     publish: true
-    primaryDescriptorPath: mutect2_pon_from_vcfs.wdl
+    primaryDescriptorPath: /mutect2_pon_from_vcfs.wdl
     authors:
       - orcid: 0000-0001-9584-9135
