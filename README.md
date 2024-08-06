@@ -1,3 +1,6 @@
+DEPRECATED. Please check for updated workflow [here](https://github.com/phylyc/somatic_workflow).
+
+
 # somatic-snvs-indels
 
 ### Purpose : 
